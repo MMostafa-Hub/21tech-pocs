@@ -1,5 +1,5 @@
 """
-WSGI config for equipmententry project.
+WSGI config for twenty_one_tech_pocs project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,6 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'equipment_entry_app.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'twenty_one_tech_pocs.settings')
 
 application = get_wsgi_application()

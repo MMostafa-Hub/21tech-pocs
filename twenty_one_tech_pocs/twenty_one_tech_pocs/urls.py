@@ -1,5 +1,5 @@
 """
-URL configuration for equipmententry project.
+URL configuration for twenty_one_tech_pocs project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/4.2/topics/http/urls/

@@ -1,6 +1,7 @@
 services:
-  equipment_entry_app:
+  twenty_one_tech_pocs:
     build: .
+    container_name: django_app
     ports:
       - "8001:8000" # Changed host port from 8000 to 8001
     environment:
@@ -10,13 +11,16 @@ services:
       - elasticsearch
       - ollama
     volumes:
-      - ../equipmententry:/app
+      - ../twenty_one_tech_pocs:/app
     command: >
       sh -c "python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
+    networks:
+      - tech
 
   elasticsearch:
     image: elasticsearch:8.14.3
+    container_name: elasticsearch
     environment:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
@@ -30,15 +34,25 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+    networks:
+      - tech
 
   ollama:
     image: ollama/ollama:0.5.7
+    container_name: ollama
     ports:
       - "11435:11434"
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
+    networks:
+      - tech
 
 volumes:
   es_data:
   ollama_data:
+
+
+networks:
+  tech:
+    driver: bridge
