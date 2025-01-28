@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'equipment_entry_app',
 ]
 
 MIDDLEWARE = [
@@ -49,7 +50,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'equipmententry.urls'
+ROOT_URLCONF = 'equipment_entry_app.urls'
 
 TEMPLATES = [
     {
@@ -67,7 +68,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'equipmententry.wsgi.application'
+WSGI_APPLICATION = 'equipment_entry_app.wsgi.application'
 
 
 # Database
