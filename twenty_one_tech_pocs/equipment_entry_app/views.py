@@ -1,15 +1,17 @@
-from dotenv import load_dotenv
 import os
+
+from dotenv import load_dotenv
 from langchain_openai.chat_models import ChatOpenAI
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-# New imports for refactoring
+
 from equipment_entry_app.prompt_factory import PromptFactory
-from equipment_entry_app.vector_store import EquipmentEntryElasticSearch
+from equipment_entry_app.vector_store.equipment_entry import EquipmentEntryElasticSearch
 
 # Initialize vector store for asset entry
 vector_store = EquipmentEntryElasticSearch()
+
 
 class GenerateAssetView(APIView):
     def options(self, request, asset_name, *args, **kwargs):
@@ -29,7 +31,8 @@ class GenerateAssetView(APIView):
             return Response({"error": "Please provide the attribute to generate"})
 
         # Use the vector store’s fuzzy_search (which uses label_mapping internally)
-        historical_values = vector_store.fuzzy_search(asset_name, attribute_key)
+        historical_values = vector_store.fuzzy_search(
+            asset_name, attribute_key)
         target_field = vector_store.label_mapping.get(attribute_key)
         if target_field is None:
             return Response({"error": "Invalid attribute provided"})
