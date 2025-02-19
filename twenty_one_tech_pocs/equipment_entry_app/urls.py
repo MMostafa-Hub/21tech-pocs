@@ -1,6 +1,7 @@
 from django.urls import path
-from equipment_entry_app.views import GenerateView
+from equipment_entry_app.views import GenerateAssetView
 
 urlpatterns = [
-    path('generate/<str:asset_id>', GenerateView.as_view(), name="generate")
+    path('generate/<str:asset_name>',
+         GenerateAssetView.as_view(), name="generate"),
 ]
