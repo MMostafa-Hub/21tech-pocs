@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -27,6 +28,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = [
     "<your_ngrok_subdomain>.ngrok.io",
+    "localhost",
 ]
 
 
@@ -39,7 +41,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    "corsheaders"
+    "corsheaders",
+    'rest_framework',
+    'maintenance_assistant',
 ]
 
 MIDDLEWARE = [
@@ -154,3 +158,13 @@ CORS_ALLOW_METHODS = [
     "DELETE",
     "OPTIONS"
 ]
+
+# OpenAI Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# Media files configuration for file uploads
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Maximum file upload size (5MB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
