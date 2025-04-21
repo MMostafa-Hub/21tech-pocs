@@ -6,8 +6,8 @@ class PromptFactory:
         # Currently only supporting "asset_entry_prompt"
         if name == "asset_entry_prompt":
             return PromptTemplate(
-                input_variables=["asset_name", "historical_values", "target_field", "field_description"],
-                template="""You are a universal equipment pattern analyzer. Generate ONLY the next logical raw value for {target_field} following the exact format and pattern of historical values.
+                input_variables=["asset_name", "historical_values", "target_field", "field_description", "accepted_values"],
+                template="""You are a universal equipment pattern analyzer. Generate ONLY the next logical raw value for {target_field} following the exact format and pattern of historical values, considering any already accepted values for other fields.
 
 Pattern Analysis Guidelines:
 1. Identify value type(s) and pattern (numerical, categorical, codes, mixed)
@@ -15,6 +15,7 @@ Pattern Analysis Guidelines:
 3. Maintain exact format (including symbols, units, casing)
 4. Continue sequence logic without conversions
 5. For mixed formats: Preserve original value types
+6. Consider the context provided by already accepted field values.
 
 Output Rules:
 - Return ONLY the raw next value as it would appear in the database
@@ -36,11 +37,14 @@ Historical: ["NORMAL", "NORMAL", "WARNING", "NORMAL"]
 Output: Normal
 
 Asset: {asset_name}
-Field: {target_field}
+Field to Predict: {target_field}
 Field Description:
 {field_description}
 
-Historical: {historical_values}
+Accepted Values:
+{accepted_values}
+
+Historical Values for {target_field}: {historical_values}
 Output:
 """
             )

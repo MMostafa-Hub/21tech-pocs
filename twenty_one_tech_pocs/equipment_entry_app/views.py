@@ -1,4 +1,5 @@
 import os
+import json  # Added import for json parsing
 
 from dotenv import load_dotenv
 from langchain_openai.chat_models import ChatOpenAI
@@ -21,14 +22,27 @@ class GenerateAssetView(APIView):
         response = Response(status=status.HTTP_200_OK)
         # Adjust the allowed origins, methods, and headers as needed
         response["Access-Control-Allow-Origin"] = "*"
-        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         response["Access-Control-Allow-Headers"] = "Accept, Content-Type, ngrok-skip-browser-warning"
         return response
 
-    def get(self, request, asset_name):
-        attribute_key = request.query_params.get('attribute', None)
+    def post(self, request, asset_name):
+        attribute_key = request.data.get('attribute', None)
+        accepted_values_dict = request.data.get(
+            'accepted_values', {})
+
         if attribute_key is None:
-            return Response({"error": "Please provide the attribute to generate"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Please provide the 'attribute' in the request body"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate accepted_values format (should be a dictionary)
+        if not isinstance(accepted_values_dict, dict):
+            return Response({"error": "'accepted_values' must be a JSON object (dictionary) in the request body"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Format accepted values for the prompt
+        accepted_values_str = "\n".join(
+            [f"- {key}: {value}" for key, value in accepted_values_dict.items()])
+        if not accepted_values_str:
+            accepted_values_str = "None provided."
 
         # Use the vector store’s fuzzy_search (which uses label_mapping internally)
         historical_values = vector_store.fuzzy_search(
@@ -63,7 +77,8 @@ class GenerateAssetView(APIView):
                 "asset_name": asset_name,
                 "historical_values": historical_values,
                 "target_field": target_field,
-                "field_description": field_description  # Pass description to prompt
+                "field_description": field_description, 
+                "accepted_values": accepted_values_str
             })
         except Exception as e:
             # Log the exception e for debugging
