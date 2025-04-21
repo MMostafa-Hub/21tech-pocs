@@ -1,25 +1,20 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 
 
-class Checklist(BaseModel):
+class ChecklistItem(BaseModel):
     checklist_id: str
-    checklist_type: str
     description: str
-    required_tools: List[str]
-    safety_requirements: List[str]
-    frequency: str
-    estimated_duration: str
-    steps: List[str]
 
 
 class TaskPlan(BaseModel):
-    plan_id: str
-    checklists: List[Checklist]
+    task_code: str
+    description: str
+    checklist: List[ChecklistItem]
 
 
 class MaintenanceSchedule(BaseModel):
-    equipment_id: str
-    equipment_name: str
-    maintenance_frequency: str
+    code: str = Field(..., max_length=20)
+    description: str = Field(..., max_length=80)
+    duration: int
     task_plans: List[TaskPlan]
