@@ -1,15 +1,16 @@
 import os
 from dotenv import load_dotenv
-from langchain_openai.chat_models import ChatOpenAI
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from equipment_entry_app.prompt_factory import PromptFactory
-from equipment_entry_app.vector_store.equipment_entry import EquipmentEntryElasticSearch
+# Updated imports to use the new common directory
+from twenty_one_tech_pocs.common import PromptFactory, LLMFactory, LLMsEnum
+from .vector_store.equipment_entry import EquipmentEntryElasticSearch
 
 # Initialize vector store for asset entry
 vector_store = EquipmentEntryElasticSearch()
+llm_factory = LLMFactory() # Instantiate the factory
 
 
 class GenerateAssetView(APIView):
@@ -58,18 +59,23 @@ class GenerateAssetView(APIView):
             return Response({"historical_values": [], "llm_response": None}, status=status.HTTP_200_OK)
 
         # Use prompt factory for asset_entry_prompt
-        equipment_prompt = PromptFactory.get_prompt("asset_entry_prompt")
+        try:
+            equipment_prompt = PromptFactory.get_prompt("asset_entry_prompt")
+        except ValueError as e:
+             print(f"Error getting prompt: {e}")
+             return Response({"error": "Server configuration error: Could not load prompt."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         load_dotenv()
-        # Use .get for safer access
-        api_key = os.environ.get("OPENAI_API_KEY_21T")
-        if not api_key:
-            # Use 500 Internal Server Error if config is missing
-            return Response({"error": "Server configuration error: OpenAI API key not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # API key is now handled internally by LLMFactory if needed (e.g., for OpenAI)
+        # api_key = os.environ.get("OPENAI_API_KEY_21T")
+        # if not api_key:
+        #     return Response({"error": "Server configuration error: OpenAI API key not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
-            model = ChatOpenAI(model="gpt-4o-mini",
-                               temperature=1, api_key=api_key)
+            # Get LLM instance from factory
+            # Assuming GPT4O_MINI is desired here, adjust if needed
+            model = llm_factory.get_llm(llm_name=LLMsEnum.GPT4O_MINI.value,
+                                        temperature=1)
             chain = equipment_prompt | model
             llm_result = chain.invoke({
                 "asset_name": asset_name,
@@ -78,6 +84,9 @@ class GenerateAssetView(APIView):
                 "field_description": field_description,
                 "accepted_values": accepted_values_str
             })
+        except ValueError as e: # Catch specific validation errors from factory
+            print(f"LLM Configuration Error: {e}")
+            return Response({"error": f"Invalid LLM configuration: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             # Log the exception e for debugging
             print(f"Error invoking LLM chain: {e}")
@@ -124,22 +133,26 @@ class GenerateBulkAssetView(APIView):
         # --- Setup ---
         predictions = {}
         load_dotenv()
-        api_key = os.environ.get("OPENAI_API_KEY_21T")
-        if not api_key:
-            return Response({"error": "Server configuration error: OpenAI API key not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # API key handled by factory
+        # api_key = os.environ.get("OPENAI_API_KEY_21T")
+        # if not api_key:
+        #     return Response({"error": "Server configuration error: OpenAI API key not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
-            model = ChatOpenAI(model="gpt-4o-mini",
-                               temperature=1, api_key=api_key)
+            # Get LLM and prompt once
+            model = llm_factory.get_llm(llm_name=LLMsEnum.GPT4O_MINI.value,
+                                        temperature=1)
             equipment_prompt = PromptFactory.get_prompt("asset_entry_prompt")
             chain = equipment_prompt | model
+        except ValueError as e: # Catch specific validation errors from factory
+            print(f"LLM/Prompt Configuration Error: {e}")
+            return Response({"error": f"Invalid LLM/Prompt configuration: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            print(f"Error initializing LLM or PromptFactory: {e}")
+            print(f"Error initializing LLM components: {e}")
             return Response({"error": "Error initializing LLM components."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Format accepted values once
-        accepted_values_str = "\n".join(
-            [f"- {key}: {value}" for key, value in accepted_values_dict.items()])
+        accepted_values_str = "\n".join([f"- {key}: {value}" for key, value in accepted_values_dict.items()])
         if not accepted_values_str:
             accepted_values_str = "None provided."
 
