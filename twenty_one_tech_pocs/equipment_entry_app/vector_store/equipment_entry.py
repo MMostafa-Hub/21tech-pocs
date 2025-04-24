@@ -202,7 +202,7 @@ class EquipmentEntryElasticSearch(ElasticSearchVectorStore):
         "setcode": "Code identifying the set the equipment belongs to.",
         "setposition": "Position within the set.",
         "xcoordinate": "X-coordinate for location mapping.",
-        "ylocation": "Y-coordinate for location mapping.", # Note: Mismatch in key vs description ('ylocation' vs 'YLOCATION') - kept key as 'ylocation'
+        "ylocation": "Y-coordinate for location mapping.",
         "rcmlevel": "Reliability Centered Maintenance (RCM) level ID.",
         "riskprioritynumber": "Calculated Risk Priority Number (RPN).",
         "facilityconditionindex": "Index representing the facility's condition.",
@@ -217,33 +217,62 @@ class EquipmentEntryElasticSearch(ElasticSearchVectorStore):
         # Get the Elasticsearch attribute for the provided label key
         attribute = self.label_mapping.get(label_key)
         if attribute is None:
+            print(f"Warning: Invalid label_key '{label_key}' provided.")
             return []
+
+        # Split the user input into terms
+        search_terms = user_input.split()
+        if not search_terms:
+            return []
+
+        # Build the boolean query with should clauses for each term
+        should_clauses = []
+        for term in search_terms:
+            should_clauses.append({
+                "match": {
+                    "ASSETID.EQUIPMENTCODE": {  # Use the mapped attribute here
+                        "query": term,
+                        "fuzziness": "AUTO",
+                        "operator": "and"  # Keep operator 'and' if needed per term, or remove/change if not
+                    }
+                }
+            })
 
         query = {
             "query": {
-                "match": {
-                    "ASSETID.EQUIPMENTCODE": {
-                        "query": user_input,
-                        "fuzziness": "AUTO",  # Adjusts fuzziness based on input length
-                        "operator": "and"
-                    }
+                "bool": {
+                    "should": should_clauses,
+                    "minimum_should_match": 1  # Match documents containing at least one term
                 }
             },
-            "_source": [attribute]
+            "_source": [attribute]  # Request only the target attribute
         }
 
+        print(f"Executing ES Query: {query}")  # Optional: for debugging
         response = self.search(query)
-        filtered_response = []
-        for hit in response["hits"]["hits"]:
-            source = hit["_source"]
-            attr_parts = attribute.split('.')
-            value = source
-            for part in attr_parts:
-                if isinstance(value, dict) and part in value:
-                    value = value[part]
-                else:
-                    value = None
-                    break
-            if value is not None:
-                filtered_response.append(value)
-        return filtered_response
+
+        # Use a set to store unique results
+        unique_results = set()
+
+        if response and "hits" in response and "hits" in response["hits"]:
+            for hit in response["hits"]["hits"]:
+                source = hit.get("_source", {})
+                # Navigate nested structure if attribute contains dots
+                attr_parts = attribute.split('.')
+                value = source
+                try:
+                    for part in attr_parts:
+                        if isinstance(value, dict) and part in value:
+                            value = value[part]
+                        else:
+                            value = None  # Attribute path not found in this hit
+                            break
+                    if value is not None:
+                        # Add the found value to the set
+                        unique_results.add(value)
+                except Exception as e:
+                    # Log errors during processing
+                    print(f"Error processing hit: {hit}, Error: {e}")
+
+        # Convert the set back to a list before returning
+        return list(unique_results)
