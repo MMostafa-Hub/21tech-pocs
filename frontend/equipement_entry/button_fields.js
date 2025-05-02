@@ -215,7 +215,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                                 EAM.Utils.toastMessage(`Prediction applied to ${fieldLabel}`);
                             } catch (e) {
                                 console.error(`Error setting value for ${fieldName} via formPanel:`, e);
-                                var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName;
+                                var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName; // Re-declare fieldLabel here for safety
                                 EAM.Utils.toastMessage(`Error applying prediction to ${fieldLabel}`);
                             }
                         } else {
@@ -224,7 +224,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                         }
                     } else {
                         console.log(`No prediction returned for ${fieldName}.`);
-                        var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName;
+                        var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName; // Re-declare fieldLabel here for safety
                         EAM.Utils.toastMessage(`No prediction available for ${fieldLabel}`);
                     }
                 } catch (e) {
@@ -236,7 +236,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                 console.error('API Request Failed:', error);
                 EAM.Utils.toastMessage('Network error or API unreachable.');
             });
-    },
+    }, // <-- Added comma here
 
     /**
      * Adds a button next to a specified component's header title.
@@ -281,12 +281,12 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                             display: 'inline-block'
                         },
                         handler: function () {
-                            // --- Bulk Prediction Logic --- 
+                            // --- Bulk Prediction Logic ---
                             console.log('Bulk predict button clicked for section:', sectionTitle);
                             var formPanel = EAM.Utils.getCurrentTab().getFormPanel();
                             if (!formPanel) {
-                                console.error("Could not find the form panel.");
-                                EAM.Utils.toastMessage('Error: Could not find form.');
+                                console.error("Could not find the form panel for bulk prediction.");
+                                EAM.Utils.toastMessage('Error: Could not find form for bulk prediction.');
                                 return;
                             }
                             var form = formPanel.getForm();
@@ -304,12 +304,12 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                             }
 
                             // 2. Get field names within this section
-                            var sectionFields = section.query('field'); // Find fields nested within the section component
+                            var sectionFields = section.query('field'); // Query fields within the specific section component
                             var attributesToPredict = [];
-                            var sectionFieldNames = new Set(); // Use a Set for quick lookup later
+                            var sectionFieldNames = new Set(); // Keep track of field names in this section
                             Ext.each(sectionFields, function (field) {
                                 var fieldName = field.getName();
-                                if (fieldName) { // Ensure field has a name
+                                if (fieldName && fieldName !== 'equipmentno') { // Exclude equipmentno
                                     attributesToPredict.push(fieldName);
                                     sectionFieldNames.add(fieldName);
                                 }
@@ -334,7 +334,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                             console.log('Accepted values from other sections:', acceptedValues);
 
                             // 4. Call the Bulk Prediction API
-                            const BASE_URL = 'https://a7a8-105-196-149-40.ngrok-free.app';
+                            const BASE_URL = 'https://a7a8-105-196-149-40.ngrok-free.app'; // Ensure this is correct
                             const API_URL = `${BASE_URL}/api/equipment-entries/generate-bulk/${encodeURIComponent(assetNameValue)}/`;
 
                             const payload = {
@@ -374,21 +374,31 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
 
                                         // 5. Update fields with predictions
                                         if (data.predictions) {
-                                            var updatedCount = 0;
-                                            Ext.Object.each(data.predictions, function (fieldName, predictionValue) {
-                                                if (predictionValue !== null && predictionValue !== undefined && sectionFieldNames.has(fieldName)) {
-                                                    // Find the field again to ensure it's still valid
-                                                    var targetField = form.findField(fieldName);
-                                                    if (targetField && targetField.ownerCt && targetField.ownerCt.getForm) {
-                                                        formPanel.setFldValue(fieldName, predictionValue);
-                                                        console.log(`Updated ${fieldName} with bulk prediction:`, predictionValue);
+                                            let updatedCount = 0;
+                                            let errorCount = 0;
+                                            // Get fresh form panel reference inside the callback
+                                            var currentFormPanel = EAM.Utils.getCurrentTab().getFormPanel(); // Re-get form panel
+                                            if (currentFormPanel) {
+                                                Ext.Object.each(data.predictions, function (fieldName, value) {
+                                                    try {
+                                                        // Use formPanel's setFldValue for robustness
+                                                        currentFormPanel.setFldValue(fieldName, value);
+                                                        console.log(`Bulk update successful for ${fieldName}`);
                                                         updatedCount++;
-                                                    } else {
-                                                        console.warn(`Target field ${fieldName} for bulk update no longer available or not in a form.`);
+                                                    } catch (fieldError) {
+                                                        console.error(`Error bulk updating field ${fieldName}:`, fieldError);
+                                                        errorCount++;
                                                     }
                                                 });
-                                            });
-                                            EAM.Utils.toastMessage(`Applied ${updatedCount} bulk predictions to ${sectionTitle}.`, 'success');
+                                                // Construct summary message
+                                                let message = `Applied ${updatedCount} bulk prediction(s) to ${sectionTitle}.`;
+                                                if (errorCount > 0) message += ` ${errorCount} error(s) occurred.`;
+                                                EAM.Utils.toastMessage(message, (errorCount > 0) ? 'warning' : 'success');
+
+                                            } else {
+                                                console.error("Could not find form panel to apply bulk updates.");
+                                                EAM.Utils.toastMessage('Error: Could not find form for bulk update.', 'error');
+                                            }
                                         } else {
                                             console.log('No predictions object returned in bulk response.');
                                             EAM.Utils.toastMessage('No bulk predictions were returned.', 'warning');
@@ -404,7 +414,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                                 });
                             // --- End of Bulk Prediction Logic ---
                         }
-                    });
+                    }); // End of Ext.create('Ext.button.Button', ...)
 
                     header.insert(titleIndex + 1, button);
                     console.log('Button inserted into header items after title for:', sectionTitle, 'with class:', buttonCls);
@@ -421,8 +431,9 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
             } else if (!section.header.rendered) {
                 console.warn('Header for ', sectionTitle, ' (' + section.id + ') is not rendered yet.');
                 // Attempt to add button after layout, might help if rendering is delayed
-                section.header.on('afterrender', function (header) {
+                section.header.on('afterrender', function (header) { // Pass header argument
                     console.log('Header rendered late for:', sectionTitle, ', attempting button add again.');
+                    // Ensure 'this' refers to the framework instance if needed, or use 'self'
                     this.addSectionHeaderButton(section, buttonText); // Retry adding the button
                 }, this, { single: true }); // Use 'this' scope and run only once
 
@@ -430,7 +441,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                 console.warn('Header for ', sectionTitle, ' (' + section.id + ') does not have a DOM element (el).');
             }
         }
-    },
+    }, // <-- Added comma here
 
     // Optional: Clean up any remaining buttons if the framework instance is destroyed
     destroy: function () {
@@ -441,5 +452,5 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
         });
         this.fieldButtons = {};
         this.callParent(arguments);
-    }
+    } // <-- No comma after the last method
 });
