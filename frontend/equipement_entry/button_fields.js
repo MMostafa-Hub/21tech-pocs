@@ -202,24 +202,30 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
 
                     // 4. Set the targetField's value with the result
                     if (data.llm_response) {
-                        // Check if the target field still exists and is part of a form
-                        if (targetField && !targetField.destroyed && targetField.ownerCt && targetField.ownerCt.getForm) {
-                            console.log(`Attempting to set value for ${fieldName}:`, data.llm_response);
+                        // Get the current form panel *inside* the callback
+                        var currentFormPanel = EAM.Utils.getCurrentTab().getFormPanel();
+                        if (currentFormPanel) {
+                            console.log(`Attempting to set value for ${fieldName} using formPanel.setFldValue:`, data.llm_response);
                             try {
-                                // Use the standard ExtJS setValue method directly on the field
-                                targetField.setValue(data.llm_response);
-                                console.log(`Successfully updated ${fieldName} with:`, data.llm_response);
-                                EAM.Utils.toastMessage(`Prediction applied to ${targetField.fieldLabel || fieldName}`);
+                                // Use the form panel's method to set the value by field name
+                                currentFormPanel.setFldValue(fieldName, data.llm_response);
+                                console.log(`Successfully updated ${fieldName} via formPanel with:`, data.llm_response);
+                                // Use targetField only for getting the label if it still exists, otherwise fallback to fieldName
+                                var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName;
+                                EAM.Utils.toastMessage(`Prediction applied to ${fieldLabel}`);
                             } catch (e) {
-                                console.error(`Error setting value for ${fieldName}:`, e);
-                                EAM.Utils.toastMessage(`Error applying prediction to ${targetField.fieldLabel || fieldName}`);
+                                console.error(`Error setting value for ${fieldName} via formPanel:`, e);
+                                var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName;
+                                EAM.Utils.toastMessage(`Error applying prediction to ${fieldLabel}`);
                             }
                         } else {
-                            console.warn(`Target field ${fieldName} no longer available or not in a form.`);
+                            console.warn(`Could not find the current form panel to update field ${fieldName}.`);
+                            EAM.Utils.toastMessage(`Error: Could not find form to apply prediction.`);
                         }
                     } else {
                         console.log(`No prediction returned for ${fieldName}.`);
-                        EAM.Utils.toastMessage(`No prediction available for ${targetField.fieldLabel || fieldName}`);
+                        var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName;
+                        EAM.Utils.toastMessage(`No prediction available for ${fieldLabel}`);
                     }
                 } catch (e) {
                     console.error('JSON Parse Error:', e, 'Raw text:', text);
@@ -380,7 +386,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                                                     } else {
                                                         console.warn(`Target field ${fieldName} for bulk update no longer available or not in a form.`);
                                                     }
-                                                }
+                                                });
                                             });
                                             EAM.Utils.toastMessage(`Applied ${updatedCount} bulk predictions to ${sectionTitle}.`, 'success');
                                         } else {
