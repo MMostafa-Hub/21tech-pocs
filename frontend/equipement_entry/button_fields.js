@@ -203,11 +203,17 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                     // 4. Set the targetField's value with the result
                     if (data.llm_response) {
                         // Check if the target field still exists and is part of a form
-                        if (targetField && targetField.ownerCt && targetField.ownerCt.getForm) {
-                            // Use setFldValue which handles different field types and events
-                            formPanel.setFldValue(fieldName, data.llm_response);
-                            console.log(`Updated ${fieldName} with:`, data.llm_response);
-                            EAM.Utils.toastMessage(`Prediction applied to ${targetField.fieldLabel || fieldName}`);
+                        if (targetField && !targetField.destroyed && targetField.ownerCt && targetField.ownerCt.getForm) {
+                            console.log(`Attempting to set value for ${fieldName}:`, data.llm_response);
+                            try {
+                                // Use the standard ExtJS setValue method directly on the field
+                                targetField.setValue(data.llm_response);
+                                console.log(`Successfully updated ${fieldName} with:`, data.llm_response);
+                                EAM.Utils.toastMessage(`Prediction applied to ${targetField.fieldLabel || fieldName}`);
+                            } catch (e) {
+                                console.error(`Error setting value for ${fieldName}:`, e);
+                                EAM.Utils.toastMessage(`Error applying prediction to ${targetField.fieldLabel || fieldName}`);
+                            }
                         } else {
                             console.warn(`Target field ${fieldName} no longer available or not in a form.`);
                         }
