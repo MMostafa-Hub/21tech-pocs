@@ -280,7 +280,11 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                             verticalAlign: 'middle',
                             display: 'inline-block'
                         },
-                        handler: function () {
+// Add the event parameter 'e' to the handler
+                        handler: function (button, e) {
+// Stop the event from propagating to the header, preventing collapse/expand
+                            e.stopEvent(); 
+
                             // --- Bulk Prediction Logic ---
                             console.log('Bulk predict button clicked for section:', sectionTitle);
                             var formPanel = EAM.Utils.getCurrentTab().getFormPanel();
