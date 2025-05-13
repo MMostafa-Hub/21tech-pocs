@@ -8,6 +8,37 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
     // Structure: { fieldName: { params: {param1: value1, ...}, data: [...] } }
     expectedValuesCache: {},
 
+    // Hardcoded expected values
+    hardcodedExpectedValues: {
+        'criticality': [
+            "Equipment criticality",
+            "MISSION CRITICAL",
+            "IMPACT IF DELAYED",
+            "NOT MISSION CRITICAL",
+            "High",
+            "Low",
+            "Moderate",
+            "Very High",
+            "Very Low"
+        ],
+        'state': [
+            "CN complete",
+            "CN in process",
+            "CN pending",
+            "Defective",
+            "Good"
+        ],
+        'assetstatus': [
+            "Active",
+            "Installed",
+            "Withdrawn"
+        ],
+        'operationalstatus': [
+            "Not Operational",
+            "Operational"
+        ]
+    },
+
     // --- Helper Functions ---
 
     /**
@@ -122,6 +153,12 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
      * @returns {Array|null} The cached data array or null if not found/cached.
      */
     getExpectedValuesForField: function (fieldName) {
+        // Prioritize hardcoded values
+        if (this.hardcodedExpectedValues.hasOwnProperty(fieldName)) {
+            console.log('Using hardcoded expected values for:', fieldName);
+            return this.hardcodedExpectedValues[fieldName];
+        }
+
         var cacheEntry = this.expectedValuesCache[fieldName];
         // We only return the data if it's cached for the *current* form state,
         // but for sending to the API, we just need the latest fetched list.
@@ -447,7 +484,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 } else {
                     console.log('Predict button for field:', blurredField.getName(), '(ID:', fieldId, ') not destroyed. Active component:', activeComponent ? activeComponent.id : 'None');
                 }
-            }, 60, this); // Slightly longer delay for blur cleanup
+            }, 20, this); // Reduced delay from 60ms to 20ms for quicker disappearance
         }
     },
 
@@ -456,7 +493,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
         // as the field might be destroyed/recreated.
         if (!targetFieldInstance || targetFieldInstance.destroyed) {
             console.warn('Target field instance is destroyed. Cannot predict.');
-            EAM.Utils.toastMessage('Cannot predict: Field not available.', 'warning');
+            Ext.toast({ html: 'Cannot predict: Field not available.', title: 'Warning', width: 300, align: 't' });
             return;
         }
 
@@ -469,7 +506,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
         var formPanel = EAM.Utils.getCurrentTab().getFormPanel();
         if (!formPanel) {
             console.error("Could not find the form panel.");
-            EAM.Utils.toastMessage('Error: Could not find form.', 'error');
+            Ext.toast({ html: 'Error: Could not find form.', title: 'Error', width: 300, align: 't' });
             return;
         }
         var form = formPanel.getForm();
@@ -477,7 +514,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
         if (!assetNameValue || String(assetNameValue).trim() === '') {
             console.warn('Asset Name (equipmentno) is not set.');
-            EAM.Utils.toastMessage('Please enter the Equipment Number first!', 'warning');
+            Ext.toast({ html: 'Please enter the Equipment Number first!', title: 'Warning', width: 300, align: 't' });
             return;
         }
         assetNameValue = String(assetNameValue).trim(); // Ensure it's a string and trimmed
@@ -496,22 +533,26 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
         // 3. Get expected values for the target field (fetch if needed, though blur/trigger should handle it)
         // We call fetch here again (force=false) just to be sure cache is checked against current params
-        this.fetchAndCacheExpectedValues(fieldName, formPanel, false).then(function (expectedValues) {
-            // expectedValues is now the array from cache/fetch, or null
+        this.fetchAndCacheExpectedValues(fieldName, formPanel, false).then(function (expectedValuesFromAPI) {
+            // expectedValuesFromAPI is now the array from cache/fetch, or null
 
             console.log('Calling API for field:', fieldName, 'with asset:', assetNameValue);
             console.log('Accepted values:', acceptedValues);
-            console.log('Expected values:', expectedValues); // This will be the array of codes or null
+
+            // Get the final list, prioritizing hardcoded values.
+            // expectedValuesFromAPI is the result from fetchAndCacheExpectedValues promise
+            var finalExpectedValues = self.hardcodedExpectedValues[fieldName] || expectedValuesFromAPI || [];
+            console.log('Final Expected values for API (single predict):', finalExpectedValues);
 
             // 4. Call the fetch API
-            const BASE_URL = 'https://8c07-197-132-87-254.ngrok-free.app'; // Replace with your actual URL
+            const BASE_URL = 'https://chief-unified-moccasin.ngrok-free.app'; // Replace with your actual URL
             const API_URL = `${BASE_URL}/api/equipment-entries/generate/${encodeURIComponent(assetNameValue)}/`;
 
             const payload = {
                 attribute: fieldName,
                 accepted_values: acceptedValues,
                 // Send the array of expected values, or an empty list if null/undefined
-                expected_values: expectedValues || []
+                expected_values: finalExpectedValues
             };
 
             console.log('API Request Payload:', payload);
@@ -531,7 +572,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
                     if (!response.ok) {
                         console.error('API Error Response:', response.status, text);
-                        EAM.Utils.toastMessage(`Error predicting ${fieldLabel}: ${response.statusText}`, 'error');
+                        Ext.toast({ html: `Error predicting ${fieldLabel}: ${response.statusText}`, title: 'Error', width: 300, align: 't' });
                         return;
                     }
 
@@ -543,32 +584,70 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                             // Get fresh form panel reference inside callback
                             var currentFormPanel = EAM.Utils.getCurrentTab().getFormPanel();
                             if (currentFormPanel && !targetFieldInstance.destroyed) {
-                                console.log(`Attempting to set value for ${fieldName}:`, data.llm_response);
-                                try {
-                                    // Use form panel's method for robustness
-                                    currentFormPanel.setFldValue(fieldName, data.llm_response);
+                                console.log(`Attempting to set value for ${fieldName} (xtype: ${targetFieldInstance.xtype}). LLM Response:`, data.llm_response);
+                                var fieldToUpdate = currentFormPanel.getForm().findField(fieldName);
+                                if (fieldToUpdate && !fieldToUpdate.destroyed) {
+                                    console.log(`Attempting to set value for ${fieldName} (xtype: ${fieldToUpdate.xtype}). LLM Response:`, data.llm_response);
+                                    var valueToSet = data.llm_response;
+
+                                    if (fieldToUpdate.isXType('combobox') || fieldToUpdate.isXType('uxcombobox')) {
+                                        var store = fieldToUpdate.getStore();
+                                        var displayTpl = fieldToUpdate.displayTpl;
+                                        var displayField = fieldToUpdate.displayField || 'description'; // Common EAM default or standard ExtJS
+                                        var valueField = fieldToUpdate.valueField || 'code'; // Common EAM default or standard ExtJS
+                                        console.log(`  Combo box detected. Store: ${store ? store.storeId || 'inline' : 'No Store! '}, DisplayField: ${displayField}, ValueField: ${valueField}`);
+
+                                        if (store) {
+                                            var recordIndex = store.findExact(displayField, data.llm_response);
+                                            if (recordIndex !== -1) {
+                                                var record = store.getAt(recordIndex);
+                                                valueToSet = record.get(valueField);
+                                                console.log(`  Found record in store for display value '${data.llm_response}'. Using actual value: '${valueToSet}' (from ${valueField}).`);
+                                            } else {
+                                                console.warn(`  Could not find record in store for display value '${data.llm_response}' using displayField '${displayField}'. Will attempt to set raw LLM response.`);
+                                                // Fallback: try to find by valueField if llm_response happens to be the actual code
+                                                var recordByValueIndex = store.findExact(valueField, data.llm_response);
+                                                if (recordByValueIndex !== -1) {
+                                                    var recordByValue = store.getAt(recordByValueIndex);
+                                                    valueToSet = recordByValue.get(valueField); // ensure it's the actual value from the record
+                                                    console.log(`  Fallback: Found record by valueField '${valueField}' with '${data.llm_response}'. Setting actual value: '${valueToSet}'.`);
+                                                } else {
+                                                    console.warn(`  Fallback: Could not find record by valueField '${valueField}' either. Raw LLM response will be used.`);
+                                                }
+                                            }
+                                        } else {
+                                            console.warn('  Combo box has no store. Will attempt to set raw LLM response.');
+                                        }
+                                    }
+
+                                    fieldToUpdate.setValue(valueToSet);
+                                    console.log(`After setValue for ${fieldName} - getValue():`, fieldToUpdate.getValue(), ", getRawValue():", fieldToUpdate.getRawValue());
+
+                                    if (fieldToUpdate.validate) {
+                                        fieldToUpdate.validate();
+                                    }
                                     console.log(`Successfully updated ${fieldName}`);
-                                    EAM.Utils.toastMessage(`Prediction applied to ${fieldLabel}`, 'success');
-                                } catch (e) {
-                                    console.error(`Error setting value for ${fieldName}:`, e);
-                                    EAM.Utils.toastMessage(`Error applying prediction to ${fieldLabel}`, 'error');
+                                    Ext.toast({ html: `Prediction applied to ${fieldLabel}`, title: 'Success', width: 300, align: 't' });
+                                } else {
+                                    console.warn(`Form panel or target field (${fieldName}) not available after prediction.`);
+                                    Ext.toast({ html: `Could not apply prediction to ${fieldLabel}.`, title: 'Warning', width: 300, align: 't' });
                                 }
                             } else {
                                 console.warn(`Form panel or target field (${fieldName}) not available after prediction.`);
-                                EAM.Utils.toastMessage(`Could not apply prediction to ${fieldLabel}.`, 'warning');
+                                Ext.toast({ html: `Could not apply prediction to ${fieldLabel}.`, title: 'Warning', width: 300, align: 't' });
                             }
                         } else {
                             console.log(`No prediction returned for ${fieldName}.`);
-                            EAM.Utils.toastMessage(`No prediction available for ${fieldLabel}`, 'info');
+                            Ext.toast({ html: `No prediction available for ${fieldLabel}`, title: 'Info', width: 300, align: 't' });
                         }
                     } catch (e) {
                         console.error('JSON Parse Error:', e, 'Raw text:', text);
-                        EAM.Utils.toastMessage('Error processing prediction response.', 'error');
+                        Ext.toast({ html: 'Error processing prediction response.', title: 'Error', width: 300, align: 't' });
                     }
                 })
                 .catch(error => {
                     console.error('API Request Failed:', error);
-                    EAM.Utils.toastMessage('Network error or API unreachable.', 'error');
+                    Ext.toast({ html: 'Network error or API unreachable.', title: 'Error', width: 300, align: 't' });
                 })
                 .finally(() => { // Ensure button is destroyed regardless of success/failure of API
                     if (targetFieldInstance && !targetFieldInstance.destroyed) {
@@ -638,7 +717,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 var formPanel = EAM.Utils.getCurrentTab().getFormPanel();
                 if (!formPanel) {
                     console.error("Could not find form panel for bulk prediction.");
-                    EAM.Utils.toastMessage('Error: Could not find form.', 'error');
+                    Ext.toast({ html: 'Error: Could not find form.', title: 'Error', width: 300, align: 't' });
                     return;
                 }
                 var form = formPanel.getForm();
@@ -646,7 +725,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 // 1. Get Asset Name
                 var assetNameValue = formPanel.getFldValue('equipmentno');
                 if (!assetNameValue || String(assetNameValue).trim() === '') {
-                    EAM.Utils.toastMessage('Please enter the Equipment Number first!', 'warning');
+                    Ext.toast({ html: 'Please enter the Equipment Number first!', title: 'Warning', width: 300, align: 't' });
                     return;
                 }
                 assetNameValue = String(assetNameValue).trim();
@@ -668,7 +747,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 });
 
                 if (attributesToPredict.length === 0) {
-                    EAM.Utils.toastMessage('No eligible fields to predict in this section.', 'info');
+                    Ext.toast({ html: 'No eligible fields to predict in this section.', title: 'Info', width: 300, align: 't' });
                     return;
                 }
                 console.log('Fields to predict in section:', attributesToPredict);
@@ -694,19 +773,24 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     });
                     console.log('Expected values map for bulk request:', attributesExpectedValuesMap);
 
-
+                    debugger;
                     // 5. Call the Bulk Prediction API
-                    const BASE_URL = 'https://8c07-197-132-87-254.ngrok-free.app'; // Replace with your URL
+                    const BASE_URL = 'https://chief-unified-moccasin.ngrok-free.app'; // Replace with your URL
                     const API_URL = `${BASE_URL}/api/equipment-entries/generate-bulk/${encodeURIComponent(assetNameValue)}/`;
 
                     const payload = {
                         attributes: attributesToPredict,
                         accepted_values: acceptedValues,
-                        attributes_expected_values: attributesExpectedValuesMap // Pass the map
+                        attributes_expected_values: attributesExpectedValuesMap
                     };
 
                     console.log('Bulk API Request Payload:', payload);
-                    EAM.Utils.toastMessage(`Requesting bulk predictions for ${sectionTitle}...`, 'info');
+                    Ext.toast({
+                        html: `Requesting bulk predictions for ${sectionTitle}...`,
+                        title: 'Info',
+                        width: 300,
+                        align: 't'
+                    });
 
 
                     fetch(API_URL, {
@@ -724,7 +808,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
                             if (!response.ok) {
                                 console.error('Bulk API Error Response:', response.status, text);
-                                EAM.Utils.toastMessage(`Error fetching bulk predictions: ${response.statusText}`, 'error');
+                                Ext.toast({ html: `Error fetching bulk predictions: ${response.statusText}`, title: 'Error', width: 300, align: 't' });
                                 return;
                             }
 
@@ -745,7 +829,37 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                                     // Find the field within the *current* form panel
                                                     var fieldToUpdate = currentFormPanel.getForm().findField(fieldName);
                                                     if (fieldToUpdate && !fieldToUpdate.destroyed) {
-                                                        currentFormPanel.setFldValue(fieldName, value);
+                                                        console.log(`Bulk update for ${fieldName} (xtype: ${fieldToUpdate.xtype}). LLM Response:`, value);
+                                                        var valueToSetBulk = value;
+
+                                                        if (fieldToUpdate.isXType('combobox') || fieldToUpdate.isXType('uxcombobox')) {
+                                                            var storeBulk = fieldToUpdate.getStore();
+                                                            var displayFieldBulk = fieldToUpdate.displayField || 'description';
+                                                            var valueFieldBulk = fieldToUpdate.valueField || 'code';
+                                                            console.log(`  Bulk Combo detected. Store: ${storeBulk ? storeBulk.storeId || 'inline' : 'No Store! '}, DisplayField: ${displayFieldBulk}, ValueField: ${valueFieldBulk}`);
+                                                            if (storeBulk) {
+                                                                var recordIndexBulk = storeBulk.findExact(displayFieldBulk, value);
+                                                                if (recordIndexBulk !== -1) {
+                                                                    valueToSetBulk = storeBulk.getAt(recordIndexBulk).get(valueFieldBulk);
+                                                                    console.log(`  Bulk: Found record for '${value}'. Using actual value: '${valueToSetBulk}'.`);
+                                                                } else {
+                                                                    console.warn(`  Bulk: Could not find record for display value '${value}' using displayField '${displayFieldBulk}'. Will attempt to set raw LLM response.`);
+                                                                    var recordByValueIndexBulk = storeBulk.findExact(valueFieldBulk, value);
+                                                                    if (recordByValueIndexBulk !== -1) {
+                                                                        valueToSetBulk = storeBulk.getAt(recordByValueIndexBulk).get(valueFieldBulk);
+                                                                        console.log(`  Bulk Fallback: Found by valueField '${valueFieldBulk}'. Setting: '${valueToSetBulk}'.`);
+                                                                    } else {
+                                                                        console.warn(`  Bulk Fallback: Could not find by valueField '${valueFieldBulk}' either.`);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        fieldToUpdate.setValue(valueToSetBulk);
+                                                        console.log(`After setValue (bulk) for ${fieldName} - getValue():`, fieldToUpdate.getValue(), ", getRawValue():", fieldToUpdate.getRawValue());
+
+                                                        if (fieldToUpdate.validate) {
+                                                            fieldToUpdate.validate();
+                                                        }
                                                         console.log(`Bulk update successful for ${fieldName}`);
                                                         updatedCount++;
                                                     } else {
@@ -763,24 +877,24 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
                                         let message = `Applied ${updatedCount} bulk prediction(s) to ${sectionTitle}.`;
                                         if (errorCount > 0) message += ` ${errorCount} error(s) occurred.`;
-                                        EAM.Utils.toastMessage(message, (errorCount > 0) ? 'warning' : 'success');
+                                        Ext.toast({ html: message, title: (errorCount > 0) ? 'Warning' : 'Success', width: 300, align: 't' });
 
                                     } else {
                                         console.error("Could not find form panel to apply bulk updates.");
-                                        EAM.Utils.toastMessage('Error: Could not find form for bulk update.', 'error');
+                                        Ext.toast({ html: 'Error: Could not find form for bulk update.', title: 'Error', width: 300, align: 't' });
                                     }
                                 } else {
                                     console.log('No predictions object returned in bulk response.');
-                                    EAM.Utils.toastMessage('No bulk predictions were returned.', 'warning');
+                                    Ext.toast({ html: 'No bulk predictions were returned.', title: 'Warning', width: 300, align: 't' });
                                 }
                             } catch (e) {
                                 console.error('Bulk JSON Parse Error:', e, 'Raw text:', text);
-                                EAM.Utils.toastMessage('Error processing bulk prediction response.', 'error');
+                                Ext.toast({ html: 'Error processing bulk prediction response.', title: 'Error', width: 300, align: 't' });
                             }
                         })
                         .catch(error => {
                             console.error('Bulk API Request Failed:', error);
-                            EAM.Utils.toastMessage('Network error or bulk API unreachable.', 'error');
+                            Ext.toast({ html: 'Network error or bulk API unreachable.', title: 'Error', width: 300, align: 't' });
                         });
 
                 }); // End Promise.all().then()
