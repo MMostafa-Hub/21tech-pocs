@@ -620,6 +620,19 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                         }
                                     }
 
+                                    // Handle Date fields: Convert string to Date object
+                                    if (fieldToUpdate.isXType('datefield') || fieldToUpdate.isXType('xdatefield') || fieldToUpdate.isXType('uxdate')) {
+                                        console.log(`  Date field detected (xtype: ${fieldToUpdate.xtype}). Original LLM response string:`, data.llm_response);
+                                        var dateObject = new Date(data.llm_response); // data.llm_response is the original string here
+                                        if (!isNaN(dateObject.getTime())) {
+                                            valueToSet = dateObject; // valueToSet was potentially modified by combo logic, but for dates, we use the parsed dateObject from original llm_response
+                                            console.log(`  Parsed to Date object:`, dateObject, `Using this for setValue.`);
+                                        } else {
+                                            console.warn(`  Could not parse date string '${data.llm_response}' into a valid Date object. Will attempt to set raw string/original valueToSet:`, valueToSet);
+                                            // valueToSet remains as it was (either raw string or what combo logic decided, though less likely for a date field to also be a combo)
+                                        }
+                                    }
+
                                     fieldToUpdate.setValue(valueToSet);
                                     console.log(`After setValue for ${fieldName} - getValue():`, fieldToUpdate.getValue(), ", getRawValue():", fieldToUpdate.getRawValue());
 
@@ -854,6 +867,19 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                                                 }
                                                             }
                                                         }
+
+                                                        // Handle Date fields for bulk update
+                                                        if (fieldToUpdate.isXType('datefield') || fieldToUpdate.isXType('xdatefield') || fieldToUpdate.isXType('uxdate')) {
+                                                            console.log(`  Bulk Date field detected (xtype: ${fieldToUpdate.xtype}). Original LLM response string:`, value);
+                                                            var dateObjectBulk = new Date(value); // value is the llm_response for this field in bulk
+                                                            if (!isNaN(dateObjectBulk.getTime())) {
+                                                                valueToSetBulk = dateObjectBulk;
+                                                                console.log(`  Bulk Parsed to Date object:`, dateObjectBulk, `Using this for setValue.`);
+                                                            } else {
+                                                                console.warn(`  Bulk Could not parse date string '${value}' into a valid Date object. Will attempt to set raw string/original valueToSetBulk:`, valueToSetBulk);
+                                                            }
+                                                        }
+
                                                         fieldToUpdate.setValue(valueToSetBulk);
                                                         console.log(`After setValue (bulk) for ${fieldName} - getValue():`, fieldToUpdate.getValue(), ", getRawValue():", fieldToUpdate.getRawValue());
 
