@@ -182,7 +182,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     'parameter.rentity': 'OBJ'
                 },
                 paramTypes: {},
-                valueField: 'class'
+                valueField: 'code'
             },
             'department': {
                 gridName: 'LVMRCS',
@@ -192,7 +192,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 },
                 staticParamsMap: {},
                 paramTypes: {},
-                valueField: 'department'
+                valueField: 'code'
             },
             'loanedtodepartment': {
                 gridName: 'LVLOANDEPT',
@@ -420,17 +420,34 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
             // Defer destruction to handle rapid focus/blur or focus moving to the button itself
             Ext.defer(function () {
                 // Check if focus has moved *away* from the field *and* the button
-                var currentFocus = Ext.ComponentManager.getActiveComponent();
-                var stillHasFocus = blurredField.hasFocus || (button && !button.destroyed && button.hasFocus);
+                if (!button || button.destroyed) {
+                    delete this.fieldButtons[fieldId]; // Cleanup map if button already gone
+                    return;
+                }
 
-                if (!stillHasFocus && button && !button.destroyed) {
-                    console.log('Destroying predict button for field ID:', fieldId);
+                var activeComponent = Ext.ComponentManager.getActiveComponent();
+                var keepButton = false; // Assume we will destroy unless a condition to keep is met
+
+                if (activeComponent) {
+                    if (activeComponent.id === button.id) {
+                        // Focus is on the predict button itself
+                        keepButton = true;
+                        console.log('Predict button for field', blurredField.getName(), '(ID:', fieldId, ') has focus. Not destroying.');
+                    } else if (activeComponent.id === blurredField.id) {
+                        // Focus is still on the field associated with this button
+                        keepButton = true;
+                        console.log('Field', blurredField.getName(), '(ID:', fieldId, ') has focus. Not destroying its predict button.');
+                    }
+                }
+
+                if (!keepButton) {
+                    console.log('Destroying predict button for field:', blurredField.getName(), '(ID:', fieldId, '). Active component:', activeComponent ? activeComponent.id : 'None');
                     button.destroy();
                     delete this.fieldButtons[fieldId];
                 } else {
-                    console.log('Button destruction deferred or cancelled for ID:', fieldId, 'Still has focus:', stillHasFocus);
+                    console.log('Predict button for field:', blurredField.getName(), '(ID:', fieldId, ') not destroyed. Active component:', activeComponent ? activeComponent.id : 'None');
                 }
-            }, 150, this); // Slightly longer delay for blur cleanup
+            }, 60, this); // Slightly longer delay for blur cleanup
         }
     },
 
@@ -552,6 +569,17 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 .catch(error => {
                     console.error('API Request Failed:', error);
                     EAM.Utils.toastMessage('Network error or API unreachable.', 'error');
+                })
+                .finally(() => { // Ensure button is destroyed regardless of success/failure of API
+                    if (targetFieldInstance && !targetFieldInstance.destroyed) {
+                        var fieldId = targetFieldInstance.getId();
+                        var buttonToDestroy = self.fieldButtons[fieldId];
+                        if (buttonToDestroy && !buttonToDestroy.destroyed) {
+                            console.log('Destroying predict button after action for field ID:', fieldId);
+                            buttonToDestroy.destroy();
+                            delete self.fieldButtons[fieldId];
+                        }
+                    }
                 });
         }); // End of .then for fetchAndCacheExpectedValues
     },
