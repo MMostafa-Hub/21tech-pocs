@@ -380,7 +380,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     Ext.each(sections, function (section) {
                         if (section.header && section.title && !section.isFormField) { // Ensure it's not a form field itself
                             console.log('-> Processing potential section:', section.title);
-                            var buttonText = 'Predict All'; // Changed button text
+                            var buttonText = 'Suggest All'; // Changed button text
                             self.addSectionHeaderButton(section, buttonText);
                         } else {
                             console.log('-> Skipping component (not a collapsible panel/fieldset with header/title):', section.id, section.xtype, section.title);
@@ -464,8 +464,8 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
             // Create the button
             var predictButton = Ext.create('Ext.button.Button', {
                 // Use an icon for less intrusion? cls: 'x-fa fa-magic', text: null,
-                text: 'Predict',
-                tooltip: 'Get prediction for ' + (focusedField.fieldLabel || fieldName),
+                text: 'Suggest',
+                tooltip: 'Get suggestion for ' + (focusedField.fieldLabel || fieldName),
                 renderTo: componentEl.dom, // Render adjacent to field components
                 style: {
                     marginLeft: '5px',
@@ -833,7 +833,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     // Ensure formPanel is the correct one related to the current section button
                     var formForPreservation = EAM.Utils.getCurrentTab().getFormPanel().getForm();
 
-                    Ext.each(fieldsToPreserve, function(fieldName) {
+                    Ext.each(fieldsToPreserve, function (fieldName) {
                         var field = formForPreservation.findField(fieldName);
                         if (field && !field.destroyed) {
                             preservedValues[fieldName] = field.getValue();
@@ -1012,7 +1012,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                         // RESTORE PRESERVED VALUES START
                                         console.log('Attempting to restore values for fields potentially affected by side-effects...');
                                         var formForRestoration = currentFormPanel.getForm(); // currentFormPanel is from the API response scope
-                                        Ext.each(fieldsToPreserve, function(fieldName) {
+                                        Ext.each(fieldsToPreserve, function (fieldName) {
                                             var originalValue = preservedValues[fieldName];
                                             // Ensure originalValue was actually captured; if not, we can't restore.
                                             if (originalValue === undefined && preservedValues.hasOwnProperty(fieldName) === false) {
