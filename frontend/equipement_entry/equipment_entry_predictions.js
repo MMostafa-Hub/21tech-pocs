@@ -36,7 +36,12 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
         'operationalstatus': [
             "Not Operational",
             "Operational"
-        ]
+        ],
+        'outofservice': [true, false],
+        'safety': [true, false],
+        'production': [true, false],
+        'trackresource': [true, false],
+        'udfchkbox01': [true, false]
     },
 
     // --- Helper Functions ---
@@ -133,6 +138,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     params: currentParams,
                     data: records
                 };
+                console.log('Cached expected values for', fieldName, ':', records); // Log the fetched/cached records
                 resolve(records);
 
             } catch (e) {
@@ -219,7 +225,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     'parameter.rentity': 'OBJ'
                 },
                 paramTypes: {},
-                valueField: 'code'
+                valueField: 'classorganization'
             },
             'department': {
                 gridName: 'LVMRCS',
@@ -229,7 +235,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 },
                 staticParamsMap: {},
                 paramTypes: {},
-                valueField: 'code'
+                valueField: 'department'
             },
             'loanedtodepartment': {
                 gridName: 'LVLOANDEPT',
@@ -258,7 +264,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     'organization': 'control.org'
                 },
                 staticParamsMap: {
-                    'parameter.per_type': '' // Assuming static based on original code
+                    'parameter.per_type': ''
                 },
                 paramTypes: {},
                 valueField: 'personcode'
@@ -316,6 +322,16 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 staticParamsMap: {},
                 paramTypes: {},
                 valueField: 'costcode'
+            },
+            'profile': {
+                gridName: 'LVPROFILE',
+                paramFields: ['organization'],
+                paramMap: {
+                    'organization': 'control.org'
+                },
+                staticParamsMap: {},
+                paramTypes: {},
+                valueField: 'profile'
             }
         };
         return gridConfigs[fieldName] || null;
@@ -335,8 +351,16 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
                     // Attach focus/blur handlers for predict buttons
                     form.getFields().each(function (field) {
+                        // --- START TEMPORARY DIAGNOSTIC LOG ---
+                        if (field && field.getName) { // Ensure field and getName method exist
+                            console.log('Initial check in getSelectors for field:', field.getName(), 'Is readOnly:', field.readOnly, 'XType:', field.xtype);
+                        }
+                        // --- END TEMPORARY DIAGNOSTIC LOG ---
+
                         // Don't add handlers to equipmentno or read-only fields etc.
-                        if (field.getName() !== 'equipmentno' && !field.readOnly && field.xtype !== 'hiddenfield') {
+                        if (field.getName() !== 'equipmentno' && field.getName() !== 'equipmentdesc' && !field.readOnly && field.xtype !== 'hiddenfield') {
+                            // The readOnly check prevents adding prediction functionality to fields that cannot be edited
+                            // Read-only fields are display-only and don't accept user input, so predictions wouldn't be applicable
                             // Delay adding focus/blur to avoid conflicts with framework/other scripts
                             Ext.defer(function () {
                                 if (!field.destroyed) { // Check if field still exists
@@ -370,7 +394,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
         // Dynamically add selectors for fields needing expected value fetching
         var fieldsToFetch = [
             'category', 'class', 'department', 'loanedtodepartment', 'meterunit',
-            'assignedto', 'syslevel', 'asslevel', 'complevel', 'costcode'
+            'assignedto', 'syslevel', 'asslevel', 'complevel', 'costcode', 'profile'
             // Add other field names here
         ];
 
@@ -402,8 +426,22 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
         var fieldName = focusedField.getName();
         var fieldId = focusedField.getId();
 
-        // Basic checks
-        if (!fieldName || fieldName === 'equipmentno' || this.fieldButtons[fieldId] || focusedField.readOnly) {
+        // Detailed log for any focused field
+        console.log('Field Focused:', {
+            name: fieldName,
+            id: fieldId,
+            xtype: focusedField.xtype,
+            isFormField: focusedField.isFormField,
+            isReadOnly: focusedField.readOnly,
+            isHidden: focusedField.hidden,
+            isDisabled: focusedField.isDisabled(),
+            value: focusedField.getValue(),
+            rawLabel: focusedField.fieldLabel,
+            itemId: focusedField.itemId
+        });
+
+        // Basic checks - Don't add button for equipmentno, equipmentdesc, or if button already exists or field is readOnly
+        if (fieldName === 'equipmentno' || fieldName === 'equipmentdesc' || this.fieldButtons[fieldId] || focusedField.readOnly) {
             return;
         }
 
@@ -502,7 +540,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
         var fieldLabel = targetFieldInstance.fieldLabel || fieldName;
         console.log('Predict button clicked for field:', fieldName);
 
-        // 1. Get the form panel and asset number
+        // 1. Get the form panel and asset description
         var formPanel = EAM.Utils.getCurrentTab().getFormPanel();
         if (!formPanel) {
             console.error("Could not find the form panel.");
@@ -510,22 +548,22 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
             return;
         }
         var form = formPanel.getForm();
-        var assetNameValue = formPanel.getFldValue('equipmentno'); // Use helper
+        var assetDescValue = formPanel.getFldValue('equipmentdesc'); // New: equipment description
 
-        if (!assetNameValue || String(assetNameValue).trim() === '') {
-            console.warn('Asset Name (equipmentno) is not set.');
-            Ext.toast({ html: 'Please enter the Equipment Number first!', title: 'Warning', width: 300, align: 't' });
+        if (!assetDescValue || String(assetDescValue).trim() === '') { // New check
+            console.warn('Equipment Description (equipmentdesc) is not set.');
+            Ext.toast({ html: 'Please enter the Equipment Description first!', title: 'Warning', width: 300, align: 't' });
             return;
         }
-        assetNameValue = String(assetNameValue).trim(); // Ensure it's a string and trimmed
+        assetDescValue = String(assetDescValue).trim(); // New trim
 
         // 2. Get other accepted field values
         var acceptedValues = {};
         form.getFields().each(function (field) {
-            // Ensure field exists, has a name, is not the target, not equipmentno, and has a value
+            // Ensure field exists, has a name, is not the target, not equipmentno, not equipmentdesc, and has a value
             if (field && !field.destroyed && field.getName() &&
                 field.getName() !== fieldName &&
-                field.getName() !== 'equipmentno' &&
+                field.getName() !== 'equipmentno' && field.getName() !== 'equipmentdesc' &&
                 field.getValue()) {
                 acceptedValues[field.getName()] = field.getValue();
             }
@@ -536,7 +574,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
         this.fetchAndCacheExpectedValues(fieldName, formPanel, false).then(function (expectedValuesFromAPI) {
             // expectedValuesFromAPI is now the array from cache/fetch, or null
 
-            console.log('Calling API for field:', fieldName, 'with asset:', assetNameValue);
+            console.log('Calling API for field:', fieldName, 'with asset description:', assetDescValue);
             console.log('Accepted values:', acceptedValues);
 
             // Get the final list, prioritizing hardcoded values.
@@ -546,7 +584,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
             // 4. Call the fetch API
             const BASE_URL = 'https://chief-unified-moccasin.ngrok-free.app'; // Replace with your actual URL
-            const API_URL = `${BASE_URL}/api/equipment-entries/generate/${encodeURIComponent(assetNameValue)}/`;
+            const API_URL = `${BASE_URL}/api/equipment-entries/generate/${encodeURIComponent(assetDescValue)}/`; // Use assetDescValue
 
             const payload = {
                 attribute: fieldName,
@@ -625,11 +663,29 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                         console.log(`  Date field detected (xtype: ${fieldToUpdate.xtype}). Original LLM response string:`, data.llm_response);
                                         var dateObject = new Date(data.llm_response); // data.llm_response is the original string here
                                         if (!isNaN(dateObject.getTime())) {
-                                            valueToSet = dateObject; // valueToSet was potentially modified by combo logic, but for dates, we use the parsed dateObject from original llm_response
+                                            valueToSet = dateObject;
                                             console.log(`  Parsed to Date object:`, dateObject, `Using this for setValue.`);
                                         } else {
                                             console.warn(`  Could not parse date string '${data.llm_response}' into a valid Date object. Will attempt to set raw string/original valueToSet:`, valueToSet);
-                                            // valueToSet remains as it was (either raw string or what combo logic decided, though less likely for a date field to also be a combo)
+                                        }
+                                    }
+
+                                    // Handle Checkbox fields: Convert string "True"/"False" to boolean
+                                    if (fieldToUpdate.isXType('checkbox') || fieldToUpdate.isXType('checkboxfield')) {
+                                        console.log(`  Checkbox field detected (xtype: ${fieldToUpdate.xtype}). Original LLM response string:`, data.llm_response);
+                                        if (typeof data.llm_response === 'string') {
+                                            if (data.llm_response.toLowerCase() === 'true') {
+                                                valueToSet = true;
+                                                console.log(`  Parsed to boolean: true`);
+                                            } else if (data.llm_response.toLowerCase() === 'false') {
+                                                valueToSet = false;
+                                                console.log(`  Parsed to boolean: false`);
+                                            } else {
+                                                console.warn(`  Unrecognized string for boolean: '${data.llm_response}'. Defaulting to false or current valueToSet:`, valueToSet);
+                                            }
+                                        } else if (typeof data.llm_response === 'boolean') {
+                                            valueToSet = data.llm_response; // Already a boolean
+                                            console.log(`  LLM response is already boolean:`, valueToSet);
                                         }
                                     }
 
@@ -726,6 +782,7 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
             handler: function (buttonCmp, event) {
                 event.stopEvent(); // Prevent header click (collapse/expand)
 
+                debugger;
                 console.log('Bulk predict button clicked for section:', sectionTitle);
                 var formPanel = EAM.Utils.getCurrentTab().getFormPanel();
                 if (!formPanel) {
@@ -735,13 +792,14 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 }
                 var form = formPanel.getForm();
 
-                // 1. Get Asset Name
-                var assetNameValue = formPanel.getFldValue('equipmentno');
-                if (!assetNameValue || String(assetNameValue).trim() === '') {
-                    Ext.toast({ html: 'Please enter the Equipment Number first!', title: 'Warning', width: 300, align: 't' });
+                // 1. Get Asset Description (instead of Asset Name/Number)
+                var assetDescValueBulk = formPanel.getFldValue('equipmentdesc'); // New
+
+                if (!assetDescValueBulk || String(assetDescValueBulk).trim() === '') { // New check
+                    Ext.toast({ html: 'Please enter the Equipment Description first!', title: 'Warning', width: 300, align: 't' });
                     return;
                 }
-                assetNameValue = String(assetNameValue).trim();
+                assetDescValueBulk = String(assetDescValueBulk).trim(); // New trim
 
                 // 2. Get field names within this section
                 var sectionFields = section.query('field'); // Query fields within the section
@@ -750,7 +808,9 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                 var fetchPromises = []; // For fetching expected values
 
                 Ext.each(sectionFields, function (field) {
-                    if (field && !field.destroyed && field.getName() && field.getName() !== 'equipmentno' && !field.readOnly) {
+                    if (field && !field.destroyed && field.getName() &&
+                        field.getName() !== 'equipmentno' && field.getName() !== 'equipmentdesc' &&
+                        !field.readOnly) {
                         var fieldName = field.getName();
                         attributesToPredict.push(fieldName);
                         sectionFieldNames.add(fieldName);
@@ -767,11 +827,28 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
 
                 // Wait for all expected value fetches to complete (or use cached data)
                 Promise.all(fetchPromises).then(function () {
+                    // PRESERVE VALUES START
+                    var fieldsToPreserve = ['equipmentdesc', 'department', 'equipmentvalue'];
+                    var preservedValues = {};
+                    // Ensure formPanel is the correct one related to the current section button
+                    var formForPreservation = EAM.Utils.getCurrentTab().getFormPanel().getForm();
+
+                    Ext.each(fieldsToPreserve, function(fieldName) {
+                        var field = formForPreservation.findField(fieldName);
+                        if (field && !field.destroyed) {
+                            preservedValues[fieldName] = field.getValue();
+                            console.log('Preserving value for', fieldName, ':', preservedValues[fieldName]);
+                        } else {
+                            console.warn('Could not find field to preserve:', fieldName);
+                        }
+                    });
+                    // PRESERVE VALUES END
+
                     // 3. Get accepted values from fields *outside* this section
                     var acceptedValues = {};
                     form.getFields().each(function (field) {
                         if (field && !field.destroyed && field.getName() &&
-                            field.getName() !== 'equipmentno' &&
+                            field.getName() !== 'equipmentno' && field.getName() !== 'equipmentdesc' &&
                             !sectionFieldNames.has(field.getName()) &&
                             field.getValue()) {
                             acceptedValues[field.getName()] = field.getValue();
@@ -786,10 +863,9 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                     });
                     console.log('Expected values map for bulk request:', attributesExpectedValuesMap);
 
-                    debugger;
                     // 5. Call the Bulk Prediction API
                     const BASE_URL = 'https://chief-unified-moccasin.ngrok-free.app'; // Replace with your URL
-                    const API_URL = `${BASE_URL}/api/equipment-entries/generate-bulk/${encodeURIComponent(assetNameValue)}/`;
+                    const API_URL = `${BASE_URL}/api/equipment-entries/generate-bulk/${encodeURIComponent(assetDescValueBulk)}/`; // Use assetDescValueBulk
 
                     const payload = {
                         attributes: attributesToPredict,
@@ -828,6 +904,10 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                             try {
                                 const data = JSON.parse(text);
                                 console.log('Bulk API Parsed Response:', data);
+                                // Log all keys from the predictions object
+                                if (data && data.predictions) {
+                                    console.log('Bulk API Prediction Keys Received:', Object.keys(data.predictions));
+                                }
 
                                 // 6. Update fields with predictions
                                 if (data.predictions) {
@@ -837,6 +917,15 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                     var currentFormPanel = EAM.Utils.getCurrentTab().getFormPanel();
                                     if (currentFormPanel) {
                                         Ext.Object.each(data.predictions, function (fieldName, value) {
+                                            var normalizedFieldName = String(fieldName).toLowerCase().trim();
+                                            debugger;
+                                            console.log('Normalized field name:', normalizedFieldName);
+                                            // Explicitly skip equipmentno, equipmentdesc, and equipmentvalue from being updated by bulk predict (case-insensitive)
+                                            if (normalizedFieldName === 'equipmentno' || normalizedFieldName === 'equipmentdesc' || normalizedFieldName === 'equipmentvalue') {
+                                                console.log(`Bulk predict: Skipping update for protected field: ${fieldName} (normalized: ${normalizedFieldName})`);
+                                                return; // Equivalent to 'continue' in a for loop
+                                            }
+
                                             if (value !== null && value !== undefined) { // Only update if a prediction was returned
                                                 try {
                                                     // Find the field within the *current* form panel
@@ -871,12 +960,31 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                                         // Handle Date fields for bulk update
                                                         if (fieldToUpdate.isXType('datefield') || fieldToUpdate.isXType('xdatefield') || fieldToUpdate.isXType('uxdate')) {
                                                             console.log(`  Bulk Date field detected (xtype: ${fieldToUpdate.xtype}). Original LLM response string:`, value);
-                                                            var dateObjectBulk = new Date(value); // value is the llm_response for this field in bulk
+                                                            var dateObjectBulk = new Date(value);
                                                             if (!isNaN(dateObjectBulk.getTime())) {
                                                                 valueToSetBulk = dateObjectBulk;
                                                                 console.log(`  Bulk Parsed to Date object:`, dateObjectBulk, `Using this for setValue.`);
                                                             } else {
                                                                 console.warn(`  Bulk Could not parse date string '${value}' into a valid Date object. Will attempt to set raw string/original valueToSetBulk:`, valueToSetBulk);
+                                                            }
+                                                        }
+
+                                                        // Handle Checkbox fields for bulk update: Convert string "True"/"False" to boolean
+                                                        if (fieldToUpdate.isXType('checkbox') || fieldToUpdate.isXType('checkboxfield')) {
+                                                            console.log(`  Bulk Checkbox field detected (xtype: ${fieldToUpdate.xtype}). Original LLM response string:`, value);
+                                                            if (typeof value === 'string') {
+                                                                if (value.toLowerCase() === 'true') {
+                                                                    valueToSetBulk = true;
+                                                                    console.log(`  Bulk Parsed to boolean: true`);
+                                                                } else if (value.toLowerCase() === 'false') {
+                                                                    valueToSetBulk = false;
+                                                                    console.log(`  Bulk Parsed to boolean: false`);
+                                                                } else {
+                                                                    console.warn(`  Bulk Unrecognized string for boolean: '${value}'. Defaulting to false or current valueToSetBulk:`, valueToSetBulk);
+                                                                }
+                                                            } else if (typeof value === 'boolean') {
+                                                                valueToSetBulk = value; // Already a boolean
+                                                                console.log(`  Bulk LLM response is already boolean:`, valueToSetBulk);
                                                             }
                                                         }
 
@@ -900,6 +1008,36 @@ Ext.define('EAM.custom.EquipmentEntryPredictions', {
                                                 console.log(`No prediction returned or invalid attribute for ${fieldName} in bulk response.`);
                                             }
                                         });
+
+                                        // RESTORE PRESERVED VALUES START
+                                        console.log('Attempting to restore values for fields potentially affected by side-effects...');
+                                        var formForRestoration = currentFormPanel.getForm(); // currentFormPanel is from the API response scope
+                                        Ext.each(fieldsToPreserve, function(fieldName) {
+                                            var originalValue = preservedValues[fieldName];
+                                            // Ensure originalValue was actually captured; if not, we can't restore.
+                                            if (originalValue === undefined && preservedValues.hasOwnProperty(fieldName) === false) {
+                                                console.warn(`Original value for ${fieldName} was not preserved. Skipping restoration.`);
+                                                return; // Continue to next field
+                                            }
+
+                                            var fieldToRestore = formForRestoration.findField(fieldName);
+                                            if (fieldToRestore && !fieldToRestore.destroyed) {
+                                                var currentValue = fieldToRestore.getValue();
+                                                // Only restore if the value actually changed.
+                                                if (currentValue !== originalValue) {
+                                                    console.log(`Restoring ${fieldName} from "${currentValue}" back to originally preserved "${originalValue}".`);
+                                                    fieldToRestore.setValue(originalValue);
+                                                    if (fieldToRestore.validate) {
+                                                        fieldToRestore.validate();
+                                                    }
+                                                } else {
+                                                    console.log(`${fieldName} current value "${currentValue}" matches preserved value. No restoration needed.`);
+                                                }
+                                            } else {
+                                                console.warn(`Field ${fieldName} for restoration not found or destroyed.`);
+                                            }
+                                        });
+                                        // RESTORE PRESERVED VALUES END
 
                                         let message = `Applied ${updatedCount} bulk prediction(s) to ${sectionTitle}.`;
                                         if (errorCount > 0) message += ` ${errorCount} error(s) occurred.`;
