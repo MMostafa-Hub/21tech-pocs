@@ -1,0 +1,1 @@
+from .service_manuals_assistant import ServiceManualsAssistantService 

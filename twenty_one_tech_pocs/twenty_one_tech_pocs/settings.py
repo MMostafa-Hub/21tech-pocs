@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure--xqh=gz5-=74^&5o!ol&j5ma-7=^&_zb2k77j!*^kkn_u+g3)^
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "<your_ngrok_subdomain>.ngrok.io",
+    "chief-unified-moccasin.ngrok-free.app",
     "localhost",
 ]
 
@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "corsheaders",
     'rest_framework',
     'maintenance_assistant',
+    'service_manuals_assistant',
 ]
 
 MIDDLEWARE = [
