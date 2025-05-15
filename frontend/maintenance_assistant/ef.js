@@ -7,127 +7,89 @@
     - Added simplified success message in popup instead of showing full API response
     - Improved error handling and messaging
     - Added ngrok URL to the API call
+
+    Modified by @Mohamed.Mostafa | 21Tech | 5/15/2025
+    - Added support for processing service manuals and extracting structured task plans
+    - Updated ngrok URL to the API call to be constant and not changeable
 */
+
 Ext.define('EAM.custom.external_bsdocu', {
     extend: 'EAM.custom.AbstractExtensibleFramework',
+
     getSelectors: function () {
-        var efc = this;
+        const efc = this;
+
+        // Format response for maintenance document
+        const formatMaintenanceResponse = (data) => {
+            let message = 'API Call Successful!';
+            if (data.extracted_data) {
+                message += '\n\nPM Schedule:\n  ' + data.extracted_data.code;
+                message += '\n\nTask Plans:';
+                data.extracted_data.task_plans.forEach((taskPlan, index) => {
+                    if (index > 0) message += '\n';
+                    message += '\n  • ' + taskPlan.task_code;
+                    (taskPlan.checklist || []).forEach(item => {
+                        message += '\n    - ' + item.checklist_id;
+                    });
+                });
+            } else {
+                message += '\n\n' + (typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
+            }
+            return message;
+        };
+
+        // Format response for service manual
+        const formatServiceResponse = (data) => {
+            let message = 'API Call Successful!';
+            if (data.extracted_data && Array.isArray(data.extracted_data)) {
+                message += '\n\nExtracted Task Plans:';
+                if (data.extracted_data.length === 0) {
+                    message += '\n  No task plans were extracted.';
+                } else {
+                    data.extracted_data.forEach((taskPlan, index) => {
+                        if (index > 0) message += '\n';
+                        message += '\n  • ' + taskPlan.task_code + (taskPlan.description ? ` (${taskPlan.description})` : '');
+                        (taskPlan.checklist || []).forEach(item => {
+                            message += '\n    - ' + item.checklist_id + (item.description ? ` (${item.description})` : '');
+                        });
+                    });
+                }
+            } else if (data.extracted_data) {
+                // Handle cases where extracted_data might not be an array or is an unexpected structure
+                message += '\n\nReceived unexpected data structure for extracted_data:';
+                message += '\n' + JSON.stringify(data.extracted_data, null, 2);
+            } else if (data.error) {
+                message = 'API Call Failed:\n  ' + data.error;
+            } else {
+                message += '\n\n' + (typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
+            }
+            return message;
+        };
+
         return {
+            // Form Panel loaded
             '[extensibleFramework] [tabName=HDR][isTabView=true]': {
-                afterrender: function (formPanel) {
-                    debugger;
+                afterrender: function () {
                     console.log('Form Panel rendered, processing fields and sections...');
                 },
                 afterloaddata: function () {
-                    debugger;
+                    // Data loaded into the form
                 }
             },
+
+            // Checkbox 1: Generate PM | Maintenance Document 
             '[extensibleFramework] [tabName=HDR][isTabView=true] [name=udfchkbox01]': {
-                change: function (checkbox, newVal, oldVal) {
-                    debugger;
+                change: efc.createCheckboxHandler('/api/maintenance/process-document/', formatMaintenanceResponse)
+            },
 
-                    var p = EAM.Utils.getCurrentTab().getFormPanel();
-                    if (newVal === true) {
-                        debugger;
-                        var vals = p.getFldValues(["documentcode", "filepath"]);
-                        var vDoccode = vals.documentcode;
-
-                        if (!vDoccode) {
-                            efc.popUpMsg('Missing Data : Document Code is required to call the API.');
-                            checkbox.setValue(false);
-                            return;
-                        }
-
-                        // --- Prepare for New API Call ---
-                        const BASE_URL = 'https://224b-102-191-231-78.ngrok-free.app'; // ensure this is your correct backend URL
-                        // Corrected API URL with the proper prefix
-                        const API_URL = `${BASE_URL}/api/maintenance/process-document/`;
-
-                        const payload = {
-                            document_code: vDoccode,
-                            create_in_eam: true
-                        };
-
-                        console.log('API Request:', {
-                            method: 'POST',
-                            url: API_URL,
-                            body: payload,
-                            timestamp: new Date().toISOString()
-                        });
-
-                        var headers = {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json',
-                            'ngrok-skip-browser-warning': 'true'
-                        };
-
-                        // --- Make the API call using Fetch API ---
-                        fetch(API_URL, {
-                            method: 'POST',
-                            headers: headers,
-                            body: JSON.stringify(payload)
-                        })
-                            .then(response => {
-                                if (!response.ok) {
-                                    // Try to get error message from response body
-                                    return response.text().then(text => {
-                                        // Construct a more detailed error message
-                                        let errorDetail = `API request failed with status ${response.status} (${response.statusText})`;
-                                        if (text) {
-                                            if (response.status === 400) {
-                                                errorDetail += ': Forbidden. Check credentials, EAM permissions, tenant/org, and API access rules.';
-                                            } else if (text.length < 200 && !text.toLowerCase().includes("<html")) { // Show short plain text errors
-                                                errorDetail += ': ' + text;
-                                            } else {
-                                                errorDetail += '. Server returned a detailed error (see console for full response).';
-                                            }
-                                        }
-                                        // Log the raw server response for debugging
-                                        console.error("Raw error response from server:", text);
-                                        throw new Error(errorDetail);
-                                    });
-                                }
-                                return response.json(); // Or response.text() if it's not JSON
-                            })
-                            .then(data => {
-                                let messageContent = 'API Call Successful!';
-                                if (data.extracted_data) {
-                                    messageContent += '\n\nPM Schedule:';
-                                    messageContent += '\n  ' + data.extracted_data.code;
-
-                                    messageContent += '\n\nTask Plans:';
-                                    data.extracted_data.task_plans.forEach((taskPlan, taskIndex) => {
-                                        if (taskIndex > 0) { // Add a blank line between task plans for separation
-                                            messageContent += '\n';
-                                        }
-                                        messageContent += '\n  • ' + taskPlan.task_code; // Task plan code
-                                        if (taskPlan.checklist && taskPlan.checklist.length > 0) {
-                                            // Checklist items listed directly under the task plan, indented
-                                            taskPlan.checklist.forEach(checklistItem => {
-                                                messageContent += '\n    - ' + checklistItem.checklist_id; // Indented checklist item
-                                            });
-                                        }
-                                    });
-                                } else {
-                                    // Fallback for unexpected data structure, with basic pretty-printing for objects
-                                    messageContent += '\n\n' + (typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
-                                }
-                                efc.popUpMsg(messageContent);
-                                console.log('API Success:', data);
-                            })
-                            .catch(error => {
-                                console.error('API Call Error Object:', error); // Log the full error object
-                                // Use the message from the error thrown in the .then(response => ...) block
-                                var errorMessageToShow = (error && error.message) ? error.message : 'An unknown API error occurred. Check console for details.';
-                                efc.popUpMsg(errorMessageToShow);
-                                checkbox.setValue(false);
-                            });
-                    }
-                }
+            // Checkbox 2: Generate Task Plans | Service Manual
+            '[extensibleFramework] [tabName=HDR][isTabView=true] [name=udfchkbox02]': {
+                change: efc.createCheckboxHandler('/api/service-manuals/process-document/', formatServiceResponse)
             }
-        }
+        };
     },
-    //--- Functions definition 
+
+    // Pop-up error or success message
     popUpMsg: function (msg) {
         EAM.MsgBox.show({
             title: 'Message Box',
@@ -136,8 +98,112 @@ Ext.define('EAM.custom.external_bsdocu', {
                 msg: EAM.Lang.getCustomFrameworkMessage(msg)
             }],
             buttons: EAM.MsgBox.OK,
-            fn: function (y) { },
+            fn: function () { },
             scope: this
         });
+    },
+
+    // Generic handler factory for checkbox APIs
+    createCheckboxHandler: function (apiPath, formatResponseCallback) {
+        debugger;
+        const efc = this;
+        const baseUrl = 'https://chief-unified-moccasin.ngrok-free.app';
+
+        return function (checkbox, newVal) {
+            debugger;
+            if (newVal === true) {
+                const p = EAM.Utils.getCurrentTab().getFormPanel();
+                const vals = p.getFldValues(["documentcode", "filepath"]);
+                const vDoccode = vals.documentcode;
+
+                if (!vDoccode) {
+                    efc.popUpMsg('Missing Data : Document Code is required to call the API.');
+                    checkbox.setValue(false);
+                    return;
+                }
+
+                checkbox.setDisabled(true);
+                efc.handleAPIcall(baseUrl, apiPath, vDoccode, formatResponseCallback, checkbox);
+            }
+        };
+    },
+
+    // Centralized API call handler
+    handleAPIcall: function (baseUrl, apiPath, vDoccode, formatResponseCallback, checkbox) {
+        debugger;
+        const API_URL = `${baseUrl}${apiPath}`;
+        const payload = {
+            document_code: vDoccode,
+            create_in_eam: false
+        };
+
+        console.log('API Request:', {
+            method: 'POST',
+            url: API_URL,
+            body: payload,
+            timestamp: new Date().toISOString()
+        });
+
+        const headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+        };
+
+        fetch(API_URL, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(payload)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        let errorDetail = `API request failed with status ${response.status} (${response.statusText})`;
+                        if (text) {
+                            if (response.status === 403) {
+                                errorDetail += ': Forbidden. Check credentials, EAM permissions, tenant/org, and API access rules.';
+                            } else if (text.length < 200 && !text.toLowerCase().includes("<html")) {
+                                errorDetail += ': ' + text;
+                            } else {
+                                errorDetail += '. Server returned a detailed error (see console for full response).';
+                            }
+                        }
+                        console.error("Raw error response from server:", text);
+                        throw new Error(errorDetail);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                const messageContent = (typeof formatResponseCallback === 'function')
+                    ? formatResponseCallback(data)
+                    : 'API Call Successful.\n\n' + JSON.stringify(data, null, 2);
+
+                const messageType = data && data.error ? 'error' : 'info';
+
+                EAM.MsgBox.show({
+                    title: messageType === 'error' ? 'API Error' : 'API Success',
+                    msgs: [{
+                        type: messageType,
+                        msg: EAM.Lang.getCustomFrameworkMessage(messageContent)
+                    }],
+                    buttons: EAM.MsgBox.OK,
+                    fn: function () { },
+                    scope: this
+                });
+                console.log('API Response Data:', data);
+            })
+            .catch(error => {
+                console.error('API Call Error Object:', error);
+                const errorMessageToShow = (error && error.message)
+                    ? error.message
+                    : 'An unknown API error occurred. Check console for details.';
+                this.popUpMsg(errorMessageToShow);
+                if (checkbox) checkbox.setValue(false);
+            })
+            .finally(() => {
+                if (checkbox) checkbox.setDisabled(false);
+            });
     }
 });
+
