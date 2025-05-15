@@ -1,36 +1,96 @@
 from django.core.files.uploadedfile import UploadedFile
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+import requests
+import base64
+from django.core.files.base import ContentFile
+
 from .schemas import MaintenanceSchedule
 from .services import MaintenanceAssistantService
-from .services.common import EAMApiService, LLMFactory
-from .services.common.config_manager import ConfigManager  # Import ConfigManager
+from common import EAMApiService, LLMFactory, ConfigManager
 
 
 class ProcessMaintenanceDocumentView(APIView):
-    parser_classes = (MultiPartParser,)
+    def __init__(self):
+        self.base_url = "https://us1.eam.hxgnsmartcloud.com:443/axis/restservices"
+        self.username = "MOHAMED.MOSTAFA@21TECH.COM"
+        self.password = "Password0!"
+        self.headers = {
+            'Content-Type': 'application/json',
+            'tenant': 'TWENTY1TECH_TST',
+            'organization': '21T'
+        }
+
+    def get_auth(self):
+        """Get the basic authentication header value."""
+        auth_str = f"{self.username}:{self.password}"
+        auth_bytes = auth_str.encode('ascii')
+        return f"Basic {base64.b64encode(auth_bytes).decode('ascii')}"
 
     def post(self, request):
         try:
-            if "document" not in request.FILES:
+            document_code = request.data.get("document_code")
+            if not document_code:
                 return Response(
-                    {"error": "No document provided"},
+                    {"error": "No document_code provided"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            document: UploadedFile = request.FILES["document"]
-            create_in_eam = request.data.get(
-                "create_in_eam", "false").lower() == "true"
+            create_in_eam = request.data.get("create_in_eam", False)
 
-            # Validate the file type
-            if not document.name.lower().endswith(".pdf"):
+            # Fetch document from EAM API
+            eam_api_url = "https://us1.eam.hxgnsmartcloud.com:443/axis/restservices/documentattachments"
+            headers = {
+                "accept": "application/json",
+                "tenant": "TWENTY1TECH_TST",
+                "organization": "21T",
+                "Authorization": self.get_auth(),
+                "Content-Type": "application/json",
+            }
+            payload = {"DOCUMENTCODE": document_code, "UPLOADTYPE": "MOBILE"}
+
+            try:
+                eam_response = requests.put(eam_api_url, headers=headers, json=payload)
+                eam_response.raise_for_status()
+                eam_data = eam_response.json()
+            except requests.exceptions.RequestException as e:
                 return Response(
-                    {"error": "Only PDF files are supported"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"error": f"Failed to fetch document from EAM: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+
+            file_content_base64 = (
+                eam_data.get("Result", {})
+                .get("ResultData", {})
+                .get("Attachment", {})
+                .get("FILECONTENT")
+            )
+            if not file_content_base64:
+                error_detail = eam_data.get("ErrorAlert")
+                if error_detail:
+                    error_message = f"EAM API Error: {error_detail}"
+                else:
+                    error_message = "FILECONTENT not found in EAM response or EAM response structure is unexpected."
+                return Response(
+                    {"error": error_message},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            try:
+                file_bytes = base64.b64decode(file_content_base64)
+            except base64.binascii.Error as e:
+                return Response(
+                    {"error": f"Failed to decode FILECONTENT: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            # Create a ContentFile (acts like UploadedFile)
+            document_name = (
+                f"{document_code}.pdf"  # Assuming the fetched file is always a PDF
+            )
+            document = ContentFile(file_bytes, name=document_name)
 
             service = MaintenanceAssistantService()
             eam_api = EAMApiService()
@@ -48,10 +108,7 @@ class ProcessMaintenanceDocumentView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
-            llm = llm_factory.get_llm(
-                llm_name=llm_params.pop("name"),
-                **llm_params
-            )
+            llm = llm_factory.get_llm(llm_name=llm_params.pop("name"), **llm_params)
             try:
                 # Process the document to extract maintenance data
                 maintenance_schedule: MaintenanceSchedule = service.process_document(
