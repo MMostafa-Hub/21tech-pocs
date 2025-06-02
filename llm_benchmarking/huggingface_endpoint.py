@@ -4,7 +4,7 @@
 
 # client = OpenAI(
 #     base_url="https://ulpglj58bbjakoej.us-east-1.aws.endpoints.huggingface.cloud/v1/",
-#     api_key="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"
+#     api_key="YOUR_HUGGINGFACE_API_KEY_HERE"  # Replace with your actual API key
 # )
 
 # chat_completion = client.chat.completions.create(
@@ -28,12 +28,13 @@
 # for message in chat_completion:
 #     print(message.choices[0].delta.content, end="")
 
+import os
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(
     model="tgi",
     base_url="https://ulpglj58bbjakoej.us-east-1.aws.endpoints.huggingface.cloud/v1/",
-    api_key="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",
+    api_key=os.getenv("HUGGINGFACE_API_KEY", "YOUR_HUGGINGFACE_API_KEY_HERE"),  # Use environment variable
     temperature=0.7,
     top_p=0.9,
     max_tokens=150,
