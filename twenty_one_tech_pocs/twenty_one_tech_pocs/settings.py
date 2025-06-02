@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'maintenance_assistant',
     'service_manuals_assistant',
+    'safety_procedure_assistant',
+    'training_manuals_assistant',
 ]
 
 MIDDLEWARE = [

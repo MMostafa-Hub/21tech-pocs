@@ -22,4 +22,6 @@ urlpatterns = [
     path('api/equipment-entries/', include('equipment_entry_app.urls')),
     path('api/maintenance/', include('maintenance_assistant.urls')),
     path('api/service-manuals/', include('service_manuals_assistant.urls')),
+    path('api/safety-procedures/', include('safety_procedure_assistant.urls')),
+    path('api/training-manuals/', include('training_manuals_assistant.urls')),
 ]
