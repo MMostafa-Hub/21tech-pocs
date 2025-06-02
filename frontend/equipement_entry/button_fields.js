@@ -60,13 +60,15 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
         var self = this;
         var fieldName = focusedField.getName();
         var fieldId = focusedField.getId(); // Use field's Ext JS ID
+        var fieldValue = focusedField.getValue(); // Get the current value of the field
+
+        // Log the field name, ID, and its current value
+        console.log('Focus on field:', fieldName, 'ID:', fieldId, 'Current Value:', fieldValue);
 
         // Don't add button for the main equipment field or if button already exists
         if (fieldName === 'equipmentno' || this.fieldButtons[fieldId]) {
             return;
         }
-
-        console.log('Focus on field:', fieldName, 'ID:', fieldId);
 
         // Use Ext.defer to allow the field's rendering/focus logic to complete
         Ext.defer(function () {
@@ -133,7 +135,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
         var formPanel = EAM.Utils.getCurrentTab().getFormPanel(); // Get the form panel
         if (!formPanel) {
             console.error("Could not find the form panel.");
-            EAM.Utils.toastMessage('Error: Could not find form.');
+            console.error('Error: Could not find form.');
             return;
         }
         var form = formPanel.getForm();
@@ -144,7 +146,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
 
         if (!assetNameValue) {
             console.warn('Asset Name (equipmentno) is not set. Cannot call API.');
-            EAM.Utils.toastMessage('Please enter the Equipment Number first!');
+            console.warn('Please enter the Equipment Number first!');
             return;
         }
 
@@ -161,13 +163,12 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
         console.log('Calling API for field:', fieldName, 'with asset:', assetNameValue, 'and accepted values:', acceptedValues);
 
         // 3. Call the fetch API
-        const BASE_URL = 'https://a7a8-105-196-149-40.ngrok-free.app'; // Ensure this is your correct backend URL
+        const BASE_URL = 'https://6542-197-132-78-174.ngrok-free.app'; // Ensure this is your correct backend URL
         // Corrected API URL with the proper prefix
         const API_URL = `${BASE_URL}/api/equipment-entries/generate/${encodeURIComponent(assetNameValue)}/`;
 
         const payload = {
             attribute: fieldName,
-            accepted_values: acceptedValues
         };
 
         console.log('API Request:', {
@@ -182,7 +183,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': 'true' // Add this header if using ngrok and encountering browser warnings
+                'ngrok-skip-browser-warning': 'true'
             },
             body: JSON.stringify(payload)
         })
@@ -192,51 +193,70 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
 
                 if (!response.ok) {
                     console.error('API Error Response:', response.status, text);
-                    EAM.Utils.toastMessage(`Error fetching prediction: ${response.statusText}`);
-                    return; // Stop processing on error
+                    console.error(`Error fetching prediction: ${response.statusText}`);
+                    return;
                 }
 
                 try {
                     const data = JSON.parse(text);
                     console.log('API Parsed Response:', data);
 
-                    // 4. Set the targetField's value with the result
                     if (data.llm_response) {
-                        // Get the current form panel *inside* the callback
                         var currentFormPanel = EAM.Utils.getCurrentTab().getFormPanel();
                         if (currentFormPanel) {
-                            console.log(`Attempting to set value for ${fieldName} using formPanel.setFldValue:`, data.llm_response);
-                            try {
-                                // Use the form panel's method to set the value by field name
-                                currentFormPanel.setFldValue(fieldName, data.llm_response);
-                                console.log(`Successfully updated ${fieldName} via formPanel with:`, data.llm_response);
-                                // Use targetField only for getting the label if it still exists, otherwise fallback to fieldName
-                                var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName;
-                                EAM.Utils.toastMessage(`Prediction applied to ${fieldLabel}`);
-                            } catch (e) {
-                                console.error(`Error setting value for ${fieldName} via formPanel:`, e);
-                                var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName; // Re-declare fieldLabel here for safety
-                                EAM.Utils.toastMessage(`Error applying prediction to ${fieldLabel}`);
+                            var llmResponseStr = data.llm_response;
+                            var fieldToUpdate = currentFormPanel.getForm().findField(fieldName);
+                            var fieldLabel = (fieldToUpdate && !fieldToUpdate.destroyed) ? fieldToUpdate.fieldLabel : fieldName;
+
+                            console.log(`Attempting to set value for ${fieldName} (xtype: ${fieldToUpdate ? fieldToUpdate.xtype : 'unknown'}) with response:`, llmResponseStr);
+
+                            var valueToSet = llmResponseStr; // Default to raw string
+
+                            if (fieldToUpdate) {
+                                var fieldXtype = fieldToUpdate.xtype;
+                                // Add 'uxdate' to the list of recognized date field xtypes
+                                if (fieldXtype === 'datefield' || fieldXtype === 'xdatefield' || fieldXtype === 'uxdate') {
+                                    var dateObject = new Date(llmResponseStr);
+                                    if (!isNaN(dateObject.getTime())) {
+                                        valueToSet = dateObject;
+                                        console.log(`Field ${fieldName} is a date field (xtype: ${fieldXtype}). Parsed to Date object:`, dateObject);
+                                    } else {
+                                        console.warn(`Field ${fieldName} (xtype: ${fieldXtype}) received non-date string: \\"${llmResponseStr}\\". Setting raw string.`);
+                                        // valueToSet remains llmResponseStr
+                                    }
+                                } else if (fieldXtype === 'numberfield' || fieldXtype === 'xnumberfield') {
+                                    var parsedNumber = parseFloat(llmResponseStr);
+                                    if (!isNaN(parsedNumber)) {
+                                        valueToSet = parsedNumber;
+                                        console.log(`Field ${fieldName} is a number field. Parsed to number:`, parsedNumber);
+                                    } else {
+                                        console.warn(`Field ${fieldName} (numberfield) received non-numeric string: \\"${llmResponseStr}\\". Setting raw string.`);
+                                        // valueToSet remains llmResponseStr
+                                    }
+                                } else {
+                                    console.log(`Field ${fieldName} is xtype ${fieldXtype}. Setting raw string value.`);
+                                    // valueToSet remains llmResponseStr for other types
+                                }
+                                currentFormPanel.setFldValue(fieldName, valueToSet);
+                                console.log(`Successfully attempted to update ${fieldLabel} via formPanel with value:`, valueToSet, `(typeof: ${typeof valueToSet})`);
+                            } else {
+                                console.warn(`Could not get fresh reference to field ${fieldName}. Setting raw string as fallback.`);
+                                currentFormPanel.setFldValue(fieldName, llmResponseStr); // Fallback if fieldToUpdate is null
                             }
                         } else {
                             console.warn(`Could not find the current form panel to update field ${fieldName}.`);
-                            EAM.Utils.toastMessage(`Error: Could not find form to apply prediction.`);
                         }
                     } else {
                         console.log(`No prediction returned for ${fieldName}.`);
-                        var fieldLabel = (targetField && !targetField.destroyed) ? targetField.fieldLabel : fieldName; // Re-declare fieldLabel here for safety
-                        EAM.Utils.toastMessage(`No prediction available for ${fieldLabel}`);
                     }
                 } catch (e) {
                     console.error('JSON Parse Error:', e, 'Raw text:', text);
-                    EAM.Utils.toastMessage('Error processing prediction response.');
                 }
             })
             .catch(error => {
                 console.error('API Request Failed:', error);
-                EAM.Utils.toastMessage('Network error or API unreachable.');
             });
-    }, // <-- Added comma here
+    }, // End of onPredictButtonClick
 
     /**
      * Adds a button next to a specified component's header title.
@@ -280,10 +300,10 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                             verticalAlign: 'middle',
                             display: 'inline-block'
                         },
-// Add the event parameter 'e' to the handler
+                        // Add the event parameter 'e' to the handler
                         handler: function (button, e) {
-// Stop the event from propagating to the header, preventing collapse/expand
-                            e.stopEvent(); 
+                            // Stop the event from propagating to the header, preventing collapse/expand
+                            e.stopEvent();
 
                             // --- Bulk Prediction Logic ---
                             console.log('Bulk predict button clicked for section:', sectionTitle);
@@ -338,7 +358,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                             console.log('Accepted values from other sections:', acceptedValues);
 
                             // 4. Call the Bulk Prediction API
-                            const BASE_URL = 'https://a7a8-105-196-149-40.ngrok-free.app'; // Ensure this is correct
+                            const BASE_URL = 'https://6542-197-132-78-174.ngrok-free.app'; // Ensure this is correct
                             const API_URL = `${BASE_URL}/api/equipment-entries/generate-bulk/${encodeURIComponent(assetNameValue)}/`;
 
                             const payload = {
@@ -368,7 +388,7 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
 
                                     if (!response.ok) {
                                         console.error('Bulk API Error Response:', response.status, text);
-                                        EAM.Utils.toastMessage(`Error fetching bulk predictions: ${response.statusText}`, 'error');
+                                        console.error(`Error fetching bulk predictions: ${response.statusText}`);
                                         return;
                                     }
 
@@ -376,45 +396,70 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                                         const data = JSON.parse(text);
                                         console.log('Bulk API Parsed Response:', data);
 
-                                        // 5. Update fields with predictions
                                         if (data.predictions) {
                                             let updatedCount = 0;
                                             let errorCount = 0;
-                                            // Get fresh form panel reference inside the callback
-                                            var currentFormPanel = EAM.Utils.getCurrentTab().getFormPanel(); // Re-get form panel
+                                            var currentFormPanel = EAM.Utils.getCurrentTab().getFormPanel();
                                             if (currentFormPanel) {
                                                 Ext.Object.each(data.predictions, function (fieldName, value) {
                                                     try {
-                                                        // Use formPanel's setFldValue for robustness
-                                                        currentFormPanel.setFldValue(fieldName, value);
-                                                        console.log(`Bulk update successful for ${fieldName}`);
+                                                        var llmResponseStr = value;
+                                                        var fieldToUpdate = currentFormPanel.getForm().findField(fieldName);
+                                                        var valueToSet = llmResponseStr; // Default to raw string
+
+                                                        if (fieldToUpdate) {
+                                                            var fieldXtype = fieldToUpdate.xtype;
+                                                            console.log(`Bulk processing field ${fieldName} (xtype: ${fieldXtype}), value: \\"${llmResponseStr}\\"`)
+                                                            // Add 'uxdate' to the list of recognized date field xtypes
+                                                            if (fieldXtype === 'datefield' || fieldXtype === 'xdatefield' || fieldXtype === 'uxdate') {
+                                                                var dateObject = new Date(llmResponseStr);
+                                                                if (!isNaN(dateObject.getTime())) {
+                                                                    valueToSet = dateObject;
+                                                                    console.log(`Bulk update for ${fieldName} (xtype: ${fieldXtype}) with Date object:`, dateObject);
+                                                                } else {
+                                                                    console.warn(`Bulk update for ${fieldName} (xtype: ${fieldXtype}): Failed to parse \\"${llmResponseStr}\\" as date. Setting raw string.`);
+                                                                    // valueToSet remains llmResponseStr
+                                                                }
+                                                            } else if (fieldXtype === 'numberfield' || fieldXtype === 'xnumberfield') {
+                                                                var parsedNumber = parseFloat(llmResponseStr);
+                                                                if (!isNaN(parsedNumber)) {
+                                                                    valueToSet = parsedNumber;
+                                                                    console.log(`Bulk update for ${fieldName} (numberfield) with number:`, parsedNumber);
+                                                                } else {
+                                                                    console.warn(`Bulk update for ${fieldName} (numberfield): Failed to parse \\"${llmResponseStr}\\" as number. Setting raw string.`);
+                                                                    // valueToSet remains llmResponseStr
+                                                                }
+                                                            } else {
+                                                                console.log(`Bulk update for ${fieldName} (xtype ${fieldXtype}). Setting raw string value.`);
+                                                                // valueToSet remains llmResponseStr
+                                                            }
+                                                            currentFormPanel.setFldValue(fieldName, valueToSet);
+                                                            console.log(`Bulk update for ${fieldName} (xtype: ${fieldXtype}) successful with value:`, valueToSet, `(typeof: ${typeof valueToSet})`);
+                                                        } else {
+                                                            console.warn(`Bulk update: Could not find field ${fieldName} to check xtype. Setting raw string: \\"${llmResponseStr}\\"`);
+                                                            currentFormPanel.setFldValue(fieldName, llmResponseStr); // Fallback
+                                                        }
                                                         updatedCount++;
                                                     } catch (fieldError) {
                                                         console.error(`Error bulk updating field ${fieldName}:`, fieldError);
                                                         errorCount++;
                                                     }
                                                 });
-                                                // Construct summary message
                                                 let message = `Applied ${updatedCount} bulk prediction(s) to ${sectionTitle}.`;
                                                 if (errorCount > 0) message += ` ${errorCount} error(s) occurred.`;
-                                                EAM.Utils.toastMessage(message, (errorCount > 0) ? 'warning' : 'success');
-
+                                                console.log(message);
                                             } else {
                                                 console.error("Could not find form panel to apply bulk updates.");
-                                                EAM.Utils.toastMessage('Error: Could not find form for bulk update.', 'error');
                                             }
                                         } else {
-                                            console.log('No predictions object returned in bulk response.');
-                                            EAM.Utils.toastMessage('No bulk predictions were returned.', 'warning');
+                                            console.warn('No predictions object returned in bulk response.');
                                         }
                                     } catch (e) {
                                         console.error('Bulk JSON Parse Error:', e, 'Raw text:', text);
-                                        EAM.Utils.toastMessage('Error processing bulk prediction response.', 'error');
                                     }
                                 })
                                 .catch(error => {
                                     console.error('Bulk API Request Failed:', error);
-                                    EAM.Utils.toastMessage('Network error or bulk API unreachable.', 'error');
                                 });
                             // --- End of Bulk Prediction Logic ---
                         }

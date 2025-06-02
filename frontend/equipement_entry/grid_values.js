@@ -14,9 +14,42 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
         data: []      // Stores the fetched records
     },
 
+
+    // 3. Call the API        
+    fetchAPIData: function(documentCode) {
+        const BASE_URL = 'https://6542-197-132-78-174.ngrok-free.app'; 
+        // Ensure this is your correct backend URL
+        
+        // Corrected API URL with the proper prefix
+        const API_URL = `${BASE_URL}/api/maintenance/process-document/`;
+        
+        const payload = {
+            document_code: documentCode,
+        };
+        
+        console.log('API Request:', {
+            method: 'POST',
+            url: API_URL,
+            body: payload,
+            timestamp: new Date().toISOString()
+        });
+        
+        return fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify(payload)
+        });
+    },
+
+
+
     getSelectors: function () {
         var self = this; // Reference to the class instance for use in handlers
-		var equipmentScreenCategories = []; // This remains as per original, handlers will update it
+        var equipmentScreenCategories = []; // This remains as per original, handlers will update it
         return {
             // Target the form panel within the 'HDR' tab
             '[extensibleFramework] [tabName=HDR][isTabView=true]': {
@@ -64,119 +97,119 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                     // --- End of new discovery logic ---
                 }
             },
-			'[extensibleFramework] [tabName=HDR][isTabView=true] [name=category]': {
-				beforetriggerclick: function(fieldComponent) { // Changed 'a' to 'fieldComponent'
-					debugger;
-					var panel = EAM.Utils.getCurrentTab().getFormPanel();
-					var currentParams = panel.getFldValues(["organization","class","classorganization"]);
-					
-					// Ensure instance cache is initialized (if not done in a constructor)
-					if (!self.cachedLvCatData) {
-						self.cachedLvCatData = { params: null, data: [] };
-					}
+            '[extensibleFramework] [tabName=HDR][isTabView=true] [name=category]': {
+                beforetriggerclick: function (fieldComponent) { // Changed 'a' to 'fieldComponent'
+                    debugger;
+                    var panel = EAM.Utils.getCurrentTab().getFormPanel();
+                    var currentParams = panel.getFldValues(["organization", "class", "classorganization"]);
 
-					// Check if data is cached for the current parameters
-					if (self.cachedLvCatData.params &&
-						self.cachedLvCatData.params.organization === currentParams.organization &&
-						self.cachedLvCatData.params.class === currentParams.class &&
-						self.cachedLvCatData.params.classorganization === currentParams.classorganization) {
-						
-						console.log('Using cached LVCAT data for params:', currentParams);
-						equipmentScreenCategories = self.cachedLvCatData.data; // Update closure variable
-						// Any other logic that needs to run with cached data
-						return; // Assuming the event doesn't need a specific return true/false to proceed/stop
-					}
-					
-					console.log('Fetching LVCAT data for params:', currentParams);
-					try{
-						var resp = EAM.Ajax.request({
-							url: "GRIDDATA",
-							params:{
-								GRID_NAME: "LVCAT",
-								REQUEST_TYPE: "LIST.HEAD_DATA.STORED",
-								LOV_ALIAS_NAME_1: "control.org", LOV_ALIAS_VALUE_1: currentParams.organization, LOV_ALIAS_TYPE_1: "text",
-								LOV_ALIAS_NAME_2: "parameter.class", LOV_ALIAS_VALUE_2: currentParams.class, LOV_ALIAS_TYPE_2: "text",
-								LOV_ALIAS_NAME_3: "parameter.classorg", LOV_ALIAS_VALUE_3: currentParams.classorganization, LOV_ALIAS_TYPE_3: "text",
-								LOV_ALIAS_NAME_4: "parameter.onlymatchclass", LOV_ALIAS_VALUE_4: "", LOV_ALIAS_TYPE_4: "text"
-							},
-							async: false, // Original code uses synchronous
-							method: "POST"
-						});
-						debugger;
-						var records = []; // Default to empty array
-						var cnt = resp.responseData.pageData.grid.GRIDRESULT.GRID.METADATA.RECORDS;
-						if(cnt > 0){
-							records = resp.responseData.pageData.grid.GRIDRESULT.GRID.DATA;
-						}
-						// Update cache
-						self.cachedLvCatData.params = currentParams;
-						self.cachedLvCatData.data = records;
-						equipmentScreenCategories = records; // Update closure variable
+                    // Ensure instance cache is initialized (if not done in a constructor)
+                    if (!self.cachedLvCatData) {
+                        self.cachedLvCatData = { params: null, data: [] };
+                    }
 
-					}catch(e){
-						console.error("Error fetching LVCAT data:", e);
-						// Clear cache on error or handle appropriately
-						self.cachedLvCatData.params = currentParams; // Cache params even on error to avoid re-fetch loops for same error
-						self.cachedLvCatData.data = [];
-						equipmentScreenCategories = [];
-					}
-				},
-				customonblur: function(fieldComponent, event) { // Changed 'a,b'
-					debugger;
-					var panel = EAM.Utils.getCurrentTab().getFormPanel();
-					var currentParams = panel.getFldValues(["organization","class","classorganization"]);
+                    // Check if data is cached for the current parameters
+                    if (self.cachedLvCatData.params &&
+                        self.cachedLvCatData.params.organization === currentParams.organization &&
+                        self.cachedLvCatData.params.class === currentParams.class &&
+                        self.cachedLvCatData.params.classorganization === currentParams.classorganization) {
 
-					// Ensure instance cache is initialized
-					if (!self.cachedLvCatData) {
-						self.cachedLvCatData = { params: null, data: [] };
-					}
+                        console.log('Using cached LVCAT data for params:', currentParams);
+                        equipmentScreenCategories = self.cachedLvCatData.data; // Update closure variable
+                        // Any other logic that needs to run with cached data
+                        return; // Assuming the event doesn't need a specific return true/false to proceed/stop
+                    }
 
-					// Check cache (similar to beforetriggerclick)
-					if (self.cachedLvCatData.params &&
-						self.cachedLvCatData.params.organization === currentParams.organization &&
-						self.cachedLvCatData.params.class === currentParams.class &&
-						self.cachedLvCatData.params.classorganization === currentParams.classorganization) {
-						
-						console.log('Using cached LVCAT data on blur for params:', currentParams);
-						equipmentScreenCategories = self.cachedLvCatData.data;
-						// Potentially trigger any UI updates needed on blur with cached data
-						return;
-					}
-					
-					console.log('Fetching LVCAT data on blur for params:', currentParams);
-					try{
-						// AJAX request identical to beforetriggerclick
-						var resp = EAM.Ajax.request({
-							url: "GRIDDATA",
-							params:{
-								GRID_NAME: "LVCAT",
-								REQUEST_TYPE: "LIST.HEAD_DATA.STORED",
-								LOV_ALIAS_NAME_1: "control.org", LOV_ALIAS_VALUE_1: currentParams.organization, LOV_ALIAS_TYPE_1: "text",
-								LOV_ALIAS_NAME_2: "parameter.class", LOV_ALIAS_VALUE_2: currentParams.class, LOV_ALIAS_TYPE_2: "text",
-								LOV_ALIAS_NAME_3: "parameter.classorg", LOV_ALIAS_VALUE_3: currentParams.classorganization, LOV_ALIAS_TYPE_3: "text",
-								LOV_ALIAS_NAME_4: "parameter.onlymatchclass", LOV_ALIAS_VALUE_4: "", LOV_ALIAS_TYPE_4: "text"
-							},
-							async: false,
-							method: "POST"
-						});
-						debugger;
-						var records = [];
-						var cnt = resp.responseData.pageData.grid.GRIDRESULT.GRID.METADATA.RECORDS;
-						if(cnt > 0){
-							records = resp.responseData.pageData.grid.GRIDRESULT.GRID.DATA;
-						}
-						self.cachedLvCatData.params = currentParams;
-						self.cachedLvCatData.data = records;
-						equipmentScreenCategories = records;
-					}catch(e){
-						console.error("Error fetching LVCAT data on blur:", e);
-						self.cachedLvCatData.params = currentParams;
-						self.cachedLvCatData.data = [];
-						equipmentScreenCategories = [];
-					}
-				},
+                    console.log('Fetching LVCAT data for params:', currentParams);
+                    try {
+                        var resp = EAM.Ajax.request({
+                            url: "GRIDDATA",
+                            params: {
+                                GRID_NAME: "LVCAT",
+                                REQUEST_TYPE: "LIST.HEAD_DATA.STORED",
+                                LOV_ALIAS_NAME_1: "control.org", LOV_ALIAS_VALUE_1: currentParams.organization, LOV_ALIAS_TYPE_1: "text",
+                                LOV_ALIAS_NAME_2: "parameter.class", LOV_ALIAS_VALUE_2: currentParams.class, LOV_ALIAS_TYPE_2: "text",
+                                LOV_ALIAS_NAME_3: "parameter.classorg", LOV_ALIAS_VALUE_3: currentParams.classorganization, LOV_ALIAS_TYPE_3: "text",
+                                LOV_ALIAS_NAME_4: "parameter.onlymatchclass", LOV_ALIAS_VALUE_4: "", LOV_ALIAS_TYPE_4: "text"
+                            },
+                            async: false, // Original code uses synchronous
+                            method: "POST"
+                        });
+                        debugger;
+                        var records = []; // Default to empty array
+                        var cnt = resp.responseData.pageData.grid.GRIDRESULT.GRID.METADATA.RECORDS;
+                        if (cnt > 0) {
+                            records = resp.responseData.pageData.grid.GRIDRESULT.GRID.DATA;
+                        }
+                        // Update cache
+                        self.cachedLvCatData.params = currentParams;
+                        self.cachedLvCatData.data = records;
+                        equipmentScreenCategories = records; // Update closure variable
 
-			}
+                    } catch (e) {
+                        console.error("Error fetching LVCAT data:", e);
+                        // Clear cache on error or handle appropriately
+                        self.cachedLvCatData.params = currentParams; // Cache params even on error to avoid re-fetch loops for same error
+                        self.cachedLvCatData.data = [];
+                        equipmentScreenCategories = [];
+                    }
+                },
+                customonblur: function (fieldComponent, event) { // Changed 'a,b'
+                    debugger;
+                    var panel = EAM.Utils.getCurrentTab().getFormPanel();
+                    var currentParams = panel.getFldValues(["organization", "class", "classorganization"]);
+
+                    // Ensure instance cache is initialized
+                    if (!self.cachedLvCatData) {
+                        self.cachedLvCatData = { params: null, data: [] };
+                    }
+
+                    // Check cache (similar to beforetriggerclick)
+                    if (self.cachedLvCatData.params &&
+                        self.cachedLvCatData.params.organization === currentParams.organization &&
+                        self.cachedLvCatData.params.class === currentParams.class &&
+                        self.cachedLvCatData.params.classorganization === currentParams.classorganization) {
+
+                        console.log('Using cached LVCAT data on blur for params:', currentParams);
+                        equipmentScreenCategories = self.cachedLvCatData.data;
+                        // Potentially trigger any UI updates needed on blur with cached data
+                        return;
+                    }
+
+                    console.log('Fetching LVCAT data on blur for params:', currentParams);
+                    try {
+                        // AJAX request identical to beforetriggerclick
+                        var resp = EAM.Ajax.request({
+                            url: "GRIDDATA",
+                            params: {
+                                GRID_NAME: "LVCAT",
+                                REQUEST_TYPE: "LIST.HEAD_DATA.STORED",
+                                LOV_ALIAS_NAME_1: "control.org", LOV_ALIAS_VALUE_1: currentParams.organization, LOV_ALIAS_TYPE_1: "text",
+                                LOV_ALIAS_NAME_2: "parameter.class", LOV_ALIAS_VALUE_2: currentParams.class, LOV_ALIAS_TYPE_2: "text",
+                                LOV_ALIAS_NAME_3: "parameter.classorg", LOV_ALIAS_VALUE_3: currentParams.classorganization, LOV_ALIAS_TYPE_3: "text",
+                                LOV_ALIAS_NAME_4: "parameter.onlymatchclass", LOV_ALIAS_VALUE_4: "", LOV_ALIAS_TYPE_4: "text"
+                            },
+                            async: false,
+                            method: "POST"
+                        });
+                        debugger;
+                        var records = [];
+                        var cnt = resp.responseData.pageData.grid.GRIDRESULT.GRID.METADATA.RECORDS;
+                        if (cnt > 0) {
+                            records = resp.responseData.pageData.grid.GRIDRESULT.GRID.DATA;
+                        }
+                        self.cachedLvCatData.params = currentParams;
+                        self.cachedLvCatData.data = records;
+                        equipmentScreenCategories = records;
+                    } catch (e) {
+                        console.error("Error fetching LVCAT data on blur:", e);
+                        self.cachedLvCatData.params = currentParams;
+                        self.cachedLvCatData.data = [];
+                        equipmentScreenCategories = [];
+                    }
+                },
+
+            }
         };
     },
 
@@ -405,9 +438,9 @@ Ext.define('EAM.custom.AddButtonOnFocus', {
                             display: 'inline-block'
                         },
                         // Add the event parameter 'e' to the handler
-                        handler: function (button, e) { 
+                        handler: function (button, e) {
                             // Stop the event from propagating to the header, preventing collapse/expand
-                            e.stopEvent(); 
+                            e.stopEvent();
 
                             // --- Bulk Prediction Logic ---
                             console.log('Bulk predict button clicked for section:', sectionTitle);
