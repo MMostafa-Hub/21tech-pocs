@@ -1,17 +1,17 @@
-/*
-    EF that Handles attachement Documents | BSDOCU.js
-    It Fire when checkbox "Generate PM" is checked and Call the Webservice " Document attachement"
-    By @Lucky |  21Tech | 5/7/2025
-
-    Modified by @Mohamed.Mostafa | 21Tech | 5/12/2025
-    - Added simplified success message in popup instead of showing full API response
-    - Improved error handling and messaging
-    - Added ngrok URL to the API call
-
-    Modified by @Mohamed.Mostafa | 21Tech | 5/15/2025
-    - Added support for processing service manuals and extracting structured task plans
-    - Updated ngrok URL to the API call to be constant and not changeable
-*/
+/**
+ *   EF that Handles attachement Documents | BSDOCU.js
+ *   It Fire when checkbox "Generate PM" is checked and Call the Webservice " Document attachement"
+ *   By @Lucky |  21Tech | 5/7/2025
+ *
+ *   Modified by @Mohamed.Mostafa | 21Tech | 5/12/2025
+ *   - Added simplified success message in popup instead of showing full API response
+ *   - Improved error handling and messaging
+ *   - Added ngrok URL to the API call
+ *
+ *   Modified by @Mohamed.Mostafa | 21Tech | 5/15/2025
+ *   - Added support for processing service manuals and extracting structured task plans
+ *   - Updated ngrok URL to the API call to be constant and not changeable
+ */
 
 Ext.define('EAM.custom.external_bsdocu', {
     extend: 'EAM.custom.AbstractExtensibleFramework',
