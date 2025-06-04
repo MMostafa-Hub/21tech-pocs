@@ -44,10 +44,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "corsheaders",
     'rest_framework',
-    'maintenance_assistant',
-    'service_manuals_assistant',
-    'safety_procedure_assistant',
-    'training_manuals_assistant',
+    'twenty_one_tech_pocs.maintenance_assistant',
+    'twenty_one_tech_pocs.service_manuals_assistant',
+    'twenty_one_tech_pocs.safety_procedure_assistant',
+    'twenty_one_tech_pocs.training_manuals_assistant',
 ]
 
 MIDDLEWARE = [
@@ -61,7 +61,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'twenty_one_tech_pocs.urls'
+ROOT_URLCONF = 'twenty_one_tech_pocs.twenty_one_tech_pocs.urls'
 
 TEMPLATES = [
     {
@@ -79,7 +79,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'twenty_one_tech_pocs.wsgi.application'
+WSGI_APPLICATION = 'twenty_one_tech_pocs.twenty_one_tech_pocs.wsgi.application'
 
 
 # Database

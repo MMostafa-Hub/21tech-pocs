@@ -19,9 +19,9 @@ from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/equipment-entries/', include('equipment_entry_app.urls')),
-    path('api/maintenance/', include('maintenance_assistant.urls')),
-    path('api/service-manuals/', include('service_manuals_assistant.urls')),
-    path('api/safety-procedures/', include('safety_procedure_assistant.urls')),
-    path('api/training-manuals/', include('training_manuals_assistant.urls')),
+    path('api/equipment-entries/', include('twenty_one_tech_pocs.equipment_entry_app.urls')),
+    path('api/maintenance/', include('twenty_one_tech_pocs.maintenance_assistant.urls')),
+    path('api/service-manuals/', include('twenty_one_tech_pocs.service_manuals_assistant.urls')),
+    path('api/safety-procedures/', include('twenty_one_tech_pocs.safety_procedure_assistant.urls')),
+    path('api/training-manuals/', include('twenty_one_tech_pocs.training_manuals_assistant.urls')),
 ]
