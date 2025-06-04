@@ -1,0 +1,14 @@
+Django>=4.2.0
+djangorestframework>=3.14.0
+python-dotenv>=1.0.0
+langchain>=0.1.0
+langchain-openai>=0.1.0
+langchain-ollama>=0.1.0
+langchain-community>=0.0.20
+requests>=2.31.0
+elasticsearch>=8.0.0
+pydantic>=2.0.0
+unstructured[pdf]>=0.10.0
+psycopg2-binary>=2.9.0
+gunicorn>=21.0.0
+django-cors-headers>=4.0.0 
