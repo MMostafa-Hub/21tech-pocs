@@ -15,22 +15,15 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 
 from .schemas import (
-    TrainingManualAnalysisOutput,
-    EquipmentQualificationProfile,
-    MaintenanceTask,
-    TechnicalSkill,
-    RequiredCertification,
-    SafetyRequirement,
-    SkillLevelChoices,
-    CertificationTypeChoices,
-    QualificationCategoryChoices
+    TrainingManualQualificationExtraction,
 )
 
 logger = logging.getLogger(__name__)
 
 class TrainingManualsAssistantService:
     """
-    Service for processing equipment training and operation manuals to extract structured qualification requirements.
+    Service for extracting technician qualifications from equipment training manuals.
+    Focuses on identifying qualification codes and descriptions based on training manual content.
     """
 
     def __init__(self):
@@ -40,16 +33,16 @@ class TrainingManualsAssistantService:
 
     def process_document(
         self, file: UploadedFile, llm: BaseChatModel
-    ) -> Optional[TrainingManualAnalysisOutput]:
+    ) -> Optional[TrainingManualQualificationExtraction]:
         """
-        Process a training manual document and generate structured qualification analysis.
+        Process a training manual document and extract qualification requirements.
         
         Args:
             file: The uploaded training manual file.
             llm: The language model.
             
         Returns:
-            Optional[TrainingManualAnalysisOutput]: Structured analysis or None if error.
+            Optional[TrainingManualQualificationExtraction]: Extracted qualifications or None if error.
         """
         try:
             file_path = self._save_temp_file(file)
@@ -61,13 +54,13 @@ class TrainingManualsAssistantService:
                 logger.warning(f"No content extracted from {file.name}")
                 return None
 
-            analysis_output = self._extract_qualification_analysis(llm, documents)
+            qualification_extraction = self._extract_qualifications(llm, documents)
             
-            if analysis_output:
-                logger.info(f"Successfully extracted qualification analysis. Identified {len(analysis_output.equipment_qualification_profiles)} equipment profiles.")
+            if qualification_extraction:
+                logger.info(f"Successfully extracted {len(qualification_extraction.qualifications)} qualifications from training manual.")
             else:
-                logger.info("No structured qualification analysis was extracted by the LLM.")
-            return analysis_output
+                logger.info("No qualifications were extracted from the training manual.")
+            return qualification_extraction
 
         except Exception as e:
             logger.error(f"Error processing training manual {file.name}: {str(e)}")
@@ -84,146 +77,124 @@ class TrainingManualsAssistantService:
         return file_path
 
     def _get_system_prompt_template(self) -> str:
-        skill_level_options = ", ".join([f'"{e.value}"' for e in SkillLevelChoices])
-        cert_type_options = ", ".join([f'"{e.value}"' for e in CertificationTypeChoices])
-        qualification_category_options = ", ".join([f'"{e.value}"' for e in QualificationCategoryChoices])
+        return """
+You are an expert AI system specialized in extracting technician qualification requirements from equipment training manuals. Your goal is to identify and extract all qualifications that technicians need based on the training manual content.
 
-        return f"""
-You are an expert AI system specialized in analyzing equipment training manuals, operation manuals, and technical documentation to extract technician qualification requirements. Your goal is to transform complex technical documentation into structured qualification profiles that ensure only properly trained personnel operate and maintain equipment.
+## Primary Extraction Objectives:
 
-Primary Objectives:
-1. **Extract Equipment Information:** Identify specific equipment types, models, and manufacturers mentioned in the documentation.
-2. **Identify Qualification Requirements:** Recognize patterns indicating required skills, certifications, experience levels, and safety protocols.
-3. **Analyze Task Complexity:** Determine the skill level required for different maintenance and operation tasks.
-4. **Extract Safety Requirements:** Identify all safety protocols, PPE requirements, and safety training needs.
-5. **Structure Qualification Data:** Organize findings into comprehensive qualification profiles for each equipment type.
+Your task is to analyze the training manual and extract qualification requirements in a simple format:
+- **Qualification Code**: A unique, descriptive code (MAXIMUM 20 characters) for each qualification
+- **Qualification Description**: A concise description (MAXIMUM 80 characters) of what the qualification entails
 
-Analysis Focus Areas:
-- **Technical Skills:** Look for mentions of specific technical competencies (electrical, mechanical, hydraulic, etc.)
-- **Certifications:** Identify required manufacturer certifications, industry standards, safety certifications
-- **Experience Requirements:** Extract minimum experience levels or years required for different tasks
-- **Safety Protocols:** Identify all safety procedures, lockout/tagout requirements, confined space protocols
-- **Tool Proficiency:** Note specialized tools or equipment that technicians must be qualified to use
-- **Training Requirements:** Identify specific training programs or hours required
+## CRITICAL REQUIREMENTS: Length Limits
+- ALL qualification codes MUST be 20 characters or less
+- ALL qualification descriptions MUST be 80 characters or less
+- Focus on the most essential information in both fields
+- Use abbreviations and concise language when necessary
+- Prioritize clarity and core information
 
-Output Requirements:
-Generate a single JSON object with three top-level keys: "equipment_qualification_profiles", "general_safety_requirements", and "general_certifications".
+## What to Look For in Training Manuals:
 
-1. **equipment_qualification_profiles**: A LIST of EquipmentQualificationProfile objects.
-   - Each profile represents a specific equipment type or model with its qualification requirements
-   - Include all maintenance tasks identified for that equipment
-   - Each maintenance task should include required skills, certifications, and safety requirements
+### Qualification Indicators:
+- Statements like "technicians must be qualified in...", "requires certification in...", "personnel should have experience with..."
+- Prerequisites mentioned before procedures or operations
+- References to specialized knowledge or skills needed
+- Training requirements, certification needs, safety protocols
+- Tool proficiency requirements
+- Experience level requirements
 
-2. **general_safety_requirements**: A LIST of SafetyRequirement objects that apply across all equipment.
+### Examples of Qualifications to Extract:
+- **Technical Skills**: Welding certifications, electrical work qualifications, hydraulic system knowledge
+- **Safety Qualifications**: OSHA training, confined space entry, lockout/tagout procedures
+- **Certification Requirements**: Manufacturer certifications, industry standards, regulatory compliance
+- **Tool Proficiency**: Specialized equipment operation, measurement tools, diagnostic equipment
+- **Procedural Knowledge**: Maintenance procedures, operation protocols, troubleshooting skills
 
-3. **general_certifications**: A LIST of RequiredCertification objects that are generally required.
+## Output Format:
 
-Schema Details:
+Return a JSON object with the following structure:
 
-**SkillLevelChoices**: {skill_level_options}
-**CertificationTypeChoices**: {cert_type_options}  
-**QualificationCategoryChoices**: {qualification_category_options}
-
-Example JSON structure:
+```json
 {{
-    "equipment_qualification_profiles": [
+    "qualifications": [
         {{
-            "equipment_type": "Centrifugal Pump Model CP-500",
-            "equipment_manufacturer": "ABC Industrial",
-            "qualification_profile_code": "QUAL-CP500-001",
-            "profile_description": "Qualification requirements for operating and maintaining CP-500 centrifugal pumps",
-            "minimum_experience_years": 2,
-            "maintenance_tasks": [
-                {{
-                    "task_code": "TASK-CP500-MAINT",
-                    "task_name": "Routine Maintenance",
-                    "task_description": "Perform routine maintenance including lubrication, inspection, and minor adjustments",
-                    "complexity_level": "Intermediate",
-                    "estimated_duration": 120,
-                    "required_skills": [
-                        {{
-                            "skill_code": "SKILL-MECH-001",
-                            "skill_name": "Mechanical Assembly",
-                            "skill_category": "Mechanical",
-                            "skill_level": "Intermediate",
-                            "description": "Ability to disassemble and reassemble pump components",
-                            "tools_required": ["Torque wrench", "Bearing puller", "Dial indicator"]
-                        }}
-                    ],
-                    "required_certifications": [
-                        {{
-                            "certification_code": "CERT-ABC-001",
-                            "certification_name": "ABC Pump Technician Certification",
-                            "certification_type": "Manufacturer Certification",
-                            "issuing_authority": "ABC Industrial Training Center",
-                            "renewal_period": 24,
-                            "is_mandatory": true
-                        }}
-                    ],
-                    "safety_requirements": [
-                        {{
-                            "safety_code": "SAFE-LOTO-001",
-                            "requirement_name": "Lockout/Tagout Procedures",
-                            "description": "Proper isolation and lockout of electrical and mechanical energy sources",
-                            "ppe_required": ["Safety glasses", "Hard hat", "Steel-toed boots"],
-                            "training_hours": 8
-                        }}
-                    ]
-                }}
-            ]
-        }}
-    ],
-    "general_safety_requirements": [
+            "qualification_code": "QUAL-WELD-STRUCT-01",
+            "qualification_description": "AWS D1.1 structural welding cert, 2+ yrs exp, MIG/TIG techniques"
+        }},
         {{
-            "safety_code": "SAFE-GEN-001",
-            "requirement_name": "General PPE Requirements",
-            "description": "Basic personal protective equipment required for all maintenance activities",
-            "ppe_required": ["Safety glasses", "Hard hat", "Steel-toed boots", "Work gloves"],
-            "training_hours": 4
-        }}
-    ],
-    "general_certifications": [
+            "qualification_code": "QUAL-SAFE-LOTO-01", 
+            "qualification_description": "Lockout/Tagout procedures, energy isolation, OSHA 10-hr training"
+        }},
         {{
-            "certification_code": "CERT-OSHA-001",
-            "certification_name": "OSHA 10-Hour Safety Training",
-            "certification_type": "Safety Certification",
-            "issuing_authority": "OSHA",
-            "renewal_period": 36,
-            "is_mandatory": true
+            "qualification_code": "QUAL-ELEC-MOTOR-01",
+            "qualification_description": "Motor maintenance: inspection, bearing replacement, testing, safety"
         }}
     ]
 }}
+```
 
-Instructions:
-- Generate unique, descriptive codes for all entities
-- Extract ALL qualification requirements mentioned in the document
-- Organize tasks by complexity level and required qualifications
-- Include specific tool requirements when mentioned
-- Capture both mandatory and recommended certifications
-- If no specific experience requirements are mentioned, you may omit minimum_experience_years
-- Ensure all codes are unique and descriptive based on equipment type and task
-- Strictly adhere to this JSON structure without markdown formatting
+## Extraction Guidelines:
+
+1. **Generate Descriptive Codes**: Create unique, meaningful codes that clearly identify the qualification type and scope
+2. **Concise Descriptions (MAX 80 CHARACTERS)**: Include the most critical information:
+   - Core skill or knowledge area
+   - Key certifications if mentioned
+   - Experience level if specified
+   - Essential tools or procedures
+   - Use abbreviations: "cert" for certification, "exp" for experience, "req" for required, etc.
+3. **Extract ALL Qualifications**: Capture every qualification requirement mentioned or implied in the training manual
+4. **Focus on Technician Requirements**: Extract qualifications for the people who will work on/with the equipment
+5. **Prioritize Information**: In the 80-character limit, prioritize:
+   - First: Type of qualification/skill
+   - Second: Key requirements or certifications
+   - Third: Experience level or tools
+
+## Description Writing Tips:
+- Use abbreviations: "cert", "exp", "req", "maint", "insp", "proc", "equip"
+- Omit articles: "the", "a", "an"
+- Use commas to separate key points
+- Focus on actionable requirements
+- Include years of experience as "2+ yrs" format
+
+## Code Naming Convention:
+- Use format: QUAL-[CAT]-[SPEC]-[NUM] (max 20 characters total)
+- Categories (3-4 chars): WELD, ELEC, MECH, SAFE, HVAC, HYDR, PNEU, etc.
+- Specific (4-6 chars): STRUCT, MOTOR, LOTO, CONF, HV, etc.  
+- Number (2-3 digits): 01, 02, 001, etc.
+- Examples: 
+  - QUAL-WELD-STRUCT-01 (18 chars)
+  - QUAL-SAFE-LOTO-001 (16 chars)
+  - QUAL-ELEC-HV-01 (13 chars)
+  - QUAL-MECH-PUMP-02 (15 chars)
+
+Return ONLY the JSON object without any markdown formatting or additional text.
 """
 
     def _create_extraction_prompt(self) -> ChatPromptTemplate:
         system_template = self._get_system_prompt_template()
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
-        human_template = """Please analyze the following training manual document and extract the structured qualification requirements based on the requirements provided.
+        human_template = """Please analyze the following training manual document and extract ALL technician qualification requirements.
 
 Training Manual Content:
 {text}
 
-Respond with ONLY the JSON object adhering to the schema described in the system prompt.
+Extract and structure all qualifications mentioned in the document. Focus on identifying what qualifications technicians need to safely and effectively work with the equipment described in this training manual.
+
+For each qualification, provide:
+1. A unique, descriptive qualification code
+2. A comprehensive description covering all relevant details from the manual
+
+Respond with ONLY the JSON object following the schema provided in the system prompt.
 """
         human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
         return ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
 
-    def _extract_qualification_analysis(
+    def _extract_qualifications(
         self, llm: BaseChatModel, documents: List[Document]
-    ) -> Optional[TrainingManualAnalysisOutput]:
-        logger.info(f"Starting qualification analysis extraction from {len(documents)} document chunks.")
+    ) -> Optional[TrainingManualQualificationExtraction]:
+        logger.info(f"Starting qualification extraction from {len(documents)} document chunks.")
         extraction_prompt = self._create_extraction_prompt()
-        parser = PydanticOutputParser(pydantic_object=TrainingManualAnalysisOutput)
+        parser = PydanticOutputParser(pydantic_object=TrainingManualQualificationExtraction)
 
         chain = load_summarize_chain(
             llm, chain_type="stuff", verbose=True, prompt=extraction_prompt
@@ -232,14 +203,14 @@ Respond with ONLY the JSON object adhering to the schema described in the system
             response = chain.invoke({"input_documents": documents})
             output_text = response.get("output_text", "")
             if not output_text:
-                logger.warning("LLM returned empty output for qualification analysis.")
+                logger.warning("LLM returned empty output for qualification extraction.")
                 return None
             
             parsed_response = parser.invoke(output_text)
-            logger.info("Successfully parsed LLM response into TrainingManualAnalysisOutput.")
+            logger.info("Successfully parsed LLM response into TrainingManualQualificationExtraction.")
             return parsed_response
         except Exception as e:
-            logger.error(f"Failed to parse LLM response for qualification analysis. Error: {str(e)}. Raw output: '{output_text[:500]}...'")
+            logger.error(f"Failed to parse LLM response for qualification extraction. Error: {str(e)}. Raw output: '{output_text[:500]}...'")
             return None
 
     def cleanup(self) -> None:

@@ -593,3 +593,63 @@ class EAMApiService:
             logger.error(f"Response content: {response_text}")
             return {"error": str(e), "status": "failed", "precaution_code": precaution_code, "status_code": status_code, "payload_sent": payload, "response_text": response_text}
 
+    def create_qualification(self, qualification_data: dict, organization_code: str = "*", class_code: str = "*"):
+        """Create a qualification in the EAM system.
+        
+        Args:
+            qualification_data: Dictionary containing qualification_code and qualification_description
+            organization_code: Organization code (default: "*")
+            class_code: Class code for the qualification (default: "*")
+            
+        Returns:
+            Dictionary containing the result of the qualification creation
+        """
+        url = f"{self.base_url}/qualifications"
+        headers = self.headers.copy()
+        headers["Authorization"] = self._get_auth()
+        headers["organization"] = organization_code
+        
+        qualification_code = qualification_data.get("qualification_code")
+        qualification_description = qualification_data.get("qualification_description")
+        
+        payload = {
+            "QUALIFICATIONID": {
+                "QUALIFICATIONCODE": qualification_code,
+                "ORGANIZATIONID": {
+                    "ORGANIZATIONCODE": organization_code,
+                },
+                "DESCRIPTION": qualification_description
+            },
+            "CLASSID": {
+                "CLASSCODE": class_code,
+                "ORGANIZATIONID": {
+                    "ORGANIZATIONCODE": organization_code,
+                },
+            },
+            "ACTIVEFLAG": "true",
+            "TRAININGRECORD": "false",
+        }
+        
+        logger.info(f"Attempting to create qualification: {qualification_code} with payload: {json.dumps(payload, indent=2)}")
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"Qualification {qualification_code} created successfully: {result}")
+            return {
+                "status": "success",
+                "qualification_code": qualification_code,
+                "eam_response": result
+            }
+        except requests.exceptions.RequestException as e:
+            response_text = e.response.text if hasattr(e, 'response') and e.response is not None else "No response text"
+            logger.error(f"Error creating qualification {qualification_code}: {str(e)}")
+            logger.error(f"Response content: {response_text}")
+            return {
+                "status": "failed",
+                "error": str(e),
+                "qualification_code": qualification_code,
+                "payload_sent": payload,
+                "response_text": response_text
+            }
+

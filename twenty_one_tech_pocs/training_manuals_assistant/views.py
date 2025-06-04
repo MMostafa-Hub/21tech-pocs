@@ -9,9 +9,10 @@ import requests
 import base64
 from typing import Optional
 
-from .schemas import TrainingManualAnalysisOutput
+from .schemas import TrainingManualQualificationExtraction
 from .services import TrainingManualsAssistantService
 from common import LLMFactory, ConfigManager
+from common.eam_api import EAMApiService
 
 class ProcessTrainingManualView(APIView):
     def __init__(self):
@@ -41,7 +42,7 @@ class ProcessTrainingManualView(APIView):
                 )
             
             # For future EAM integration - currently just extracting qualification data
-            create_qualifications_in_eam = request.data.get("create_qualifications_in_eam", False)
+            create_qualifications_in_eam = request.data.get("create_in_eam", False)
             processed_file_for_service: Optional[InMemoryUploadedFile] = None
             document_name_for_service = "training_manual.pdf"
 
@@ -107,48 +108,59 @@ class ProcessTrainingManualView(APIView):
             response_data = {}
             try:
                 # Process the training manual to extract qualification requirements
-                analysis_output: Optional[TrainingManualAnalysisOutput] = training_service.process_document(
+                qualification_extraction: Optional[TrainingManualQualificationExtraction] = training_service.process_document(
                     file=processed_file_for_service, llm=llm
                 )
 
-                if not analysis_output:
-                    return Response({"error": "Failed to analyze training manual or no qualification data extracted."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                if not qualification_extraction:
+                    return Response({"error": "Failed to extract qualifications from training manual or no qualification data found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-                response_data["qualification_analysis"] = analysis_output.model_dump()
+                response_data["qualification_extraction"] = qualification_extraction.model_dump()
 
                 # Add summary statistics
                 response_data["summary"] = {
-                    "total_equipment_profiles": len(analysis_output.equipment_qualification_profiles),
-                    "total_general_safety_requirements": len(analysis_output.general_safety_requirements),
-                    "total_general_certifications": len(analysis_output.general_certifications),
-                    "equipment_types": [profile.equipment_type for profile in analysis_output.equipment_qualification_profiles]
+                    "total_qualifications": len(qualification_extraction.qualifications),
+                    "qualification_codes": [q.qualification_code for q in qualification_extraction.qualifications],
                 }
 
                 # Future enhancement: EAM integration for creating qualification records
                 if create_qualifications_in_eam:
-                    # This would integrate with EAM's qualification management system
-                    # For now, we'll just acknowledge the request
-                    response_data["eam_integration_note"] = "EAM qualification creation is not yet implemented. Qualification data has been extracted and can be manually imported to EAM."
-                    
-                    # Future implementation would include:
-                    # 1. Creating qualification profiles in EAM
-                    # 2. Setting up skill requirements
-                    # 3. Linking certifications to equipment
-                    # 4. Creating training requirements
+                    # Initialize EAM API service
+                    eam_service = EAMApiService()
                     
                     qualification_summary = []
-                    for profile in analysis_output.equipment_qualification_profiles:
-                        profile_summary = {
-                            "equipment_type": profile.equipment_type,
-                            "qualification_code": profile.qualification_profile_code,
-                            "total_maintenance_tasks": len(profile.maintenance_tasks),
-                            "total_required_skills": sum(len(task.required_skills) for task in profile.maintenance_tasks),
-                            "total_required_certifications": sum(len(task.required_certifications) for task in profile.maintenance_tasks),
-                            "eam_integration_status": "READY_FOR_MANUAL_IMPORT"
+                    eam_creation_results = []
+                    
+                    for qualification in qualification_extraction.qualifications:
+                        # Create qualification in EAM
+                        qualification_data = {
+                            "qualification_code": qualification.qualification_code,
+                            "qualification_description": qualification.qualification_description
                         }
-                        qualification_summary.append(profile_summary)
+                        
+                        eam_result = eam_service.create_qualification(
+                            qualification_data=qualification_data,
+                            organization_code="*",
+                            class_code="*"
+                        )
+                        
+                        eam_creation_results.append(eam_result)
+                        
+                        qualification_summary_item = {
+                            "qualification_code": qualification.qualification_code,
+                            "qualification_description": qualification.qualification_description,
+                            "eam_integration_status": eam_result.get("status", "unknown"),
+                            "eam_creation_result": eam_result
+                        }
+                        qualification_summary.append(qualification_summary_item)
                     
                     response_data["qualification_summary_for_eam"] = qualification_summary
+                    response_data["eam_creation_summary"] = {
+                        "total_qualifications_processed": len(qualification_extraction.qualifications),
+                        "successful_creations": len([r for r in eam_creation_results if r.get("status") == "success"]),
+                        "failed_creations": len([r for r in eam_creation_results if r.get("status") == "failed"]),
+                        "creation_results": eam_creation_results
+                    }
 
                 return Response(response_data, status=status.HTTP_200_OK)
             
