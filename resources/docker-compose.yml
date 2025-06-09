@@ -4,12 +4,14 @@ services:
     container_name: django_app
     ports:
       - "8001:8000" # Changed host port from 8000 to 8001
+    env_file:
+      - ../.env
     environment:
       - ES_URL=http://elasticsearch:9200
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # - OLLAMA_BASE_URL=http://ollama:11434
     depends_on:
       - elasticsearch
-      - ollama
+      # - ollama
     volumes:
       - ../twenty_one_tech_pocs:/app
     command: >
