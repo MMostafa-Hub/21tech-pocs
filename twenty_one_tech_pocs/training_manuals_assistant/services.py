@@ -86,12 +86,14 @@ Your task is to analyze the training manual and extract qualification requiremen
 - **Qualification Code**: A unique, descriptive code (MAXIMUM 20 characters) for each qualification
 - **Qualification Description**: A concise description (MAXIMUM 80 characters) of what the qualification entails
 
-## CRITICAL REQUIREMENTS: Length Limits
-- ALL qualification codes MUST be 20 characters or less
+## CRITICAL REQUIREMENTS: Length Limits - STRICTLY ENFORCED
+- ⚠️ **QUALIFICATION CODES: MAXIMUM 20 CHARACTERS - NO EXCEPTIONS** ⚠️
 - ALL qualification descriptions MUST be 80 characters or less
-- Focus on the most essential information in both fields
+- Count every character including dashes and numbers in codes
+- If a code exceeds 20 characters, shorten words (e.g., MAGDRL not MAGDRILL)
 - Use abbreviations and concise language when necessary
 - Prioritize clarity and core information
+- **VALIDATION WILL FAIL if codes exceed 20 characters**
 
 ## What to Look For in Training Manuals:
 
@@ -118,7 +120,7 @@ Return a JSON object with the following structure:
 {{
     "qualifications": [
         {{
-            "qualification_code": "QUAL-WELD-STRUCT-01",
+            "qualification_code": "QUAL-WELD-STRUC-01",
             "qualification_description": "AWS D1.1 structural welding cert, 2+ yrs exp, MIG/TIG techniques"
         }},
         {{
@@ -156,16 +158,21 @@ Return a JSON object with the following structure:
 - Focus on actionable requirements
 - Include years of experience as "2+ yrs" format
 
-## Code Naming Convention:
-- Use format: QUAL-[CAT]-[SPEC]-[NUM] (max 20 characters total)
+## Code Naming Convention - STRICT 20 CHARACTER LIMIT:
+- Use format: QUAL-[CAT]-[SPEC]-[NUM] - NEVER exceed 20 characters total
 - Categories (3-4 chars): WELD, ELEC, MECH, SAFE, HVAC, HYDR, PNEU, etc.
-- Specific (4-6 chars): STRUCT, MOTOR, LOTO, CONF, HV, etc.  
-- Number (2-3 digits): 01, 02, 001, etc.
-- Examples: 
-  - QUAL-WELD-STRUCT-01 (18 chars)
-  - QUAL-SAFE-LOTO-001 (16 chars)
-  - QUAL-ELEC-HV-01 (13 chars)
-  - QUAL-MECH-PUMP-02 (15 chars)
+- Specific (3-5 chars): STRUC, MOTOR, LOTO, CONF, HV, DRILL, GRIND, MIX, WELD, BAND, etc.  
+- Number (2 digits): 01, 02, 03, etc. (DO NOT use 3-digit numbers like 001)
+- **CRITICAL**: Count characters carefully - codes MUST be ≤20 characters
+- Examples with character counts: 
+  - QUAL-WELD-STRUC-01 (17 chars) ✓
+  - QUAL-SAFE-LOTO-01 (15 chars) ✓
+  - QUAL-ELEC-HV-01 (13 chars) ✓
+  - QUAL-MECH-PUMP-01 (15 chars) ✓
+  - QUAL-SAFE-DRILL-01 (16 chars) ✓
+  - QUAL-SAFE-GRIND-01 (16 chars) ✓
+
+**AVOID LONG WORDS**: Use abbreviations like DRILL (not DRILLING), GRIND (not GRINDING), MAGDRL (not MAGDRILL)
 
 Return ONLY the JSON object without any markdown formatting or additional text.
 """
