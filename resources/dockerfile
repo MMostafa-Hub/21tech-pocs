@@ -1,7 +1,8 @@
 FROM python:3.9-slim-buster
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    NLTK_DATA=/usr/local/share/nltk_data
 
 WORKDIR /app
 
@@ -22,10 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-# Install Python dependencies with version constraints to fix unstructured compatibility
+# Install Python dependencies and download NLTK data
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir "unstructured[pdf]" && \
-    pip install --no-cache-dir "pdfminer.six==20240706"
+    pip install --no-cache-dir "unstructured[pdf]" "pdfminer.six==20240706" && \
+    python -m nltk.downloader -d /usr/local/share/nltk_data punkt
 
 COPY . .
 
