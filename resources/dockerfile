@@ -5,14 +5,27 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Install system dependencies needed for unstructured and PDF processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    libgomp1 \
+    libmagic1 \
+    poppler-utils \
+    tesseract-ocr \
+    libreoffice \
+    pandoc \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Python dependencies with version constraints to fix unstructured compatibility
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir "unstructured[pdf]" && \
+    pip install --no-cache-dir "pdfminer.six==20240706"
 
 COPY . .
 
