@@ -2,7 +2,7 @@ FROM python:3.9-slim-buster
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    NLTK_DATA=/usr/local/share/nltk_data
+    NLTK_DATA=/nltk_data
 
 WORKDIR /app
 
@@ -24,15 +24,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-# Install Python dependencies and download NLTK data
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir "unstructured[pdf]" "pdfminer.six==20240706"
 
-# Manually download and unzip NLTK data to the location specified by NLTK_DATA
-RUN mkdir -p ${NLTK_DATA}/tokenizers && \
-    curl -L "https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/tokenizers/punkt.zip" -o "${NLTK_DATA}/tokenizers/punkt.zip" && \
-    unzip "${NLTK_DATA}/tokenizers/punkt.zip" -d "${NLTK_DATA}/tokenizers/" && \
-    rm "${NLTK_DATA}/tokenizers/punkt.zip"
+# Manually create, download, and set permissions for NLTK data
+RUN mkdir -p /nltk_data/tokenizers && \
+    curl -L "https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/tokenizers/punkt.zip" -o "/nltk_data/tokenizers/punkt.zip" && \
+    unzip "/nltk_data/tokenizers/punkt.zip" -d "/nltk_data/tokenizers/" && \
+    rm "/nltk_data/tokenizers/punkt.zip" && \
+    chmod -R 755 /nltk_data
 
 COPY . .
 
