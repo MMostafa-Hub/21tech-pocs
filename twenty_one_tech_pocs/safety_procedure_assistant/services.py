@@ -12,25 +12,21 @@ from langchain.prompts import (
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
-from langchain_community.document_loaders import UnstructuredPDFLoader
+import fitz  # PyMuPDF
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 
-from .schemas import (
-    Hazard,
-    Precaution,
-    HazardTypeChoices,
-    PrecautionTimingChoices,
-    IncidentAnalysisOutput
-)
+from .schemas import JobSafetyAnalysis
 from common.eam_api import EAMApiService
+from ...common.utils import get_llm
 
 logger = logging.getLogger(__name__)
 
 class SafetyProcedureAssistantService:
     """
-    Service for processing incident report documents and extracting structured safety analysis.
+    A service to analyze equipment incident reports and extract a Job Safety Analysis (JSA).
+    It identifies hazards, required precautions, and links them to the involved equipment.
     """
 
     def __init__(self):
@@ -41,32 +37,42 @@ class SafetyProcedureAssistantService:
 
     def process_document(
         self, file: UploadedFile, llm: BaseChatModel
-    ) -> Optional[IncidentAnalysisOutput]:
+    ) -> Optional[JobSafetyAnalysis]:
         """
-        Process an incident report document and generate a structured analysis.
+        Processes an uploaded incident report to extract a Job Safety Analysis.
+
         Args:
-            file: The uploaded document file.
-            llm: The language model.
+            file: The uploaded incident report file.
+            llm: The language model to use for extraction.
+
         Returns:
-            Optional[IncidentAnalysisOutput]: Structured analysis or None if error.
+            An optional JobSafetyAnalysis object or None if extraction fails.
         """
         try:
             file_path = self._save_temp_file(file)
             self.temp_file_path = file_path
-            loader = UnstructuredPDFLoader(file_path)
-            documents = loader.load()
 
-            if not documents:
+            # Use PyMuPDF to extract text from the PDF
+            doc = fitz.open(file_path)
+            full_text = ""
+            for page in doc:
+                full_text += page.get_text()
+            doc.close()
+
+            # Create a single LangChain Document
+            documents = [Document(page_content=full_text)]
+
+            if not documents or not documents[0].page_content.strip():
                 logger.warning(f"No content extracted from {file.name}")
                 return None
 
-            analysis_output = self._extract_incident_analysis(llm, documents)
+            job_safety_analysis = self._extract_job_safety_analysis(llm, documents)
             
-            if analysis_output:
-                logger.info(f"Successfully extracted incident analysis. Identified {len(analysis_output.identified_hazards)} hazards and {len(analysis_output.equipment_safety_links)} equipment links.")
+            if job_safety_analysis:
+                logger.info(f"Successfully extracted {len(job_safety_analysis.identified_hazards)} hazards from incident report.")
             else:
-                logger.info("No structured analysis was extracted by the LLM.")
-            return analysis_output
+                logger.info("No job safety analysis could be extracted from the incident report.")
+            return job_safety_analysis
 
         except Exception as e:
             logger.error(f"Error processing incident report {file.name}: {str(e)}")
@@ -75,6 +81,7 @@ class SafetyProcedureAssistantService:
             self.cleanup()
 
     def _save_temp_file(self, file: UploadedFile) -> str:
+        """Saves the uploaded file to a temporary location."""
         file_path = os.path.join(self.temp_dir, file.name)
         with open(file_path, "wb+") as destination:
             for chunk in file.chunks():
@@ -83,125 +90,134 @@ class SafetyProcedureAssistantService:
         return file_path
 
     def _get_system_prompt_template(self) -> str:
-        hazard_type_options = ", ".join([f"\"{e.value}\"" for e in HazardTypeChoices])
-        precaution_timing_options = ", ".join([f"\"{e.value}\"" for e in PrecautionTimingChoices])
-        equipment_category_options = ", ".join([f"\"{category}\"" for category in self.eam_api_service.get_equipment_categories()])
-        equipment_class_options = ", ".join([f"\"{class_item}\"" for class_item in self.eam_api_service.get_equipment_classes()])
-
+        # This prompt is extensive and defines the entire extraction logic for the LLM.
+        # It includes schemas, constraints, and examples for the expected JSON output.
         return """
-You are an AI expert in workplace safety incident analysis. Your task is to thoroughly analyze an incident report and structure the findings into two main components:
-1.  A comprehensive list of all hazards identified or inferred, each with a detailed list of ALL its relevant precautions.
-2.  A list of specific links between equipment mentioned in the incident, a KEY precaution related to that equipment and incident, and the hazard this precaution addresses.
+You are an expert AI system for analyzing equipment incident reports and generating a Job Safety Analysis (JSA). Your primary goal is to extract hazards, precautions, and their links to specific equipment from the provided incident report.
 
-Output Requirements:
-Generate a single JSON object. This object must have two top-level keys: "identified_hazards" and "equipment_safety_links".
+## CORE TASK
+Analyze the incident report to identify:
+1.  **Hazards**: What potential dangers or risks were present or contributed to the incident?
+2.  **Precautions**: What safety measures or controls could prevent such incidents?
+3.  **Equipment Links**: Which specific precautions apply to which pieces of equipment?
 
-1.  `identified_hazards`: This must be a LIST of Hazard objects.
-    -   Each Hazard object must have:
-        -   `hazard_code`: A unique, LLM-proposed code (e.g., "HAZ-INC001-BURN").
-        -   `description`: Detailed description of the hazard.
-        -   `hazard_type`: Must be one of: {{hazard_type_options}}.
-        -   `precautions`: A LIST of Precaution objects. This list should include ALL precautions relevant to THIS hazard.
-            -   Each Precaution object must have:
-                -   `precaution_code`: A unique, LLM-proposed code (e.g., "PREC-HAZ001-001").
-                -   `description`: Detailed description of the precaution.
-                -   `timing` (optional): Must be one of: {{precaution_timing_options}}.
+## JSON OUTPUT STRUCTURE
+You must return a single JSON object with two main keys: `identified_hazards` and `equipment_safety_links`.
 
-2.  `equipment_safety_links`: This must be a LIST of EquipmentSafetyLink objects.
-    -   This list should only be populated if the incident clearly describes specific equipment involved in a safety lapse related to a specific precaution for an identified hazard.
-    -   Each EquipmentSafetyLink object must have:
-        -   `equipment_details`: An object with:
-            -   `equipment_id`: (Mandatory) Specific name/model of the equipment (e.g., "Blowtorch Model X23").
-            -   `class_code` (optional): Must be one of: {{equipment_class_options}} if specified.
-            -   `category` (optional): Must be one of: {{equipment_category_options}} if specified.
-        -   `linked_precaution`: A Precaution object. This precaution MUST BE an exact copy of one of the precautions listed under the corresponding hazard in the `identified_hazards` list.
-        -   `parent_hazard_code`: The `hazard_code` of the hazard (from the `identified_hazards` list) to which the `linked_precaution` belongs.
-
-Example JSON structure:
-{{
+```json
+{
     "identified_hazards": [
-        {{
-            "hazard_code": "HAZ-BTORCH-001",
-            "description": "Risk of burn injury from direct flame or heated parts of the blowtorch.",
-            "hazard_type": "Physical Hazards",
+        {
+            "hazard_code": "HAZ-UNIQUE-CODE-001",
+            "description": "A clear, concise description of the hazard.",
+            "hazard_type": "One of the allowed hazard types",
             "precautions": [
-                {{"precaution_code": "PREC-BT001-PPE01", "description": "Wear appropriate heat-resistant gloves and face shield.", "timing": "Pre Work"}},
-                {{"precaution_code": "PREC-BT001-AREA02", "description": "Clear work area of flammable materials before starting.", "timing": "Pre Work"}},
-                {{"precaution_code": "PREC-BT001-OPER03", "description": "Never leave a lit blowtorch unattended.", "timing": "During"}}
+                {
+                    "precaution_code": "PREC-UNIQUE-CODE-001",
+                    "description": "A specific, actionable safety measure.",
+                    "timing": "When the precaution should be taken"
+                }
             ]
-        }},
-        {{
-            "hazard_code": "HAZ-GASLEAK-002",
-            "description": "Risk of explosion or fire due to gas leak from faulty blowtorch connection.",
-            "hazard_type": "Chemical Hazards",
-            "precautions": [
-                {{"precaution_code": "PREC-GL002-INSP01", "description": "Inspect hose and connections for leaks before each use with soapy water.", "timing": "Pre Work"}},
-                {{"precaution_code": "PREC-GL002-SHUTOFF02", "description": "Ensure gas cylinder valve is closed when not in use.", "timing": "Post Work"}}
-            ]
-        }}
+        }
     ],
     "equipment_safety_links": [
-        {{
-            "equipment_details": {{
-                "equipment_id": "SuperFlame Blowtorch SF-5000",
-                "class_code": "HWEQ",
-                "category": "Welding Tools"
-            }},
-            "linked_precaution": {{
-                "precaution_code": "PREC-BT001-PPE01", 
-                "description": "Wear appropriate heat-resistant gloves and face shield.", 
-                "timing": "Pre Work"
-            }},
-            "parent_hazard_code": "HAZ-BTORCH-001",
-        }}
+        {
+            "equipment_details": {
+                "equipment_id": "Specific model or ID of the equipment",
+                "class_code": "A valid equipment class code",
+                "category": "A valid equipment category"
+            },
+            "linked_precaution": {
+                "precaution_code": "PREC-UNIQUE-CODE-001",
+                "description": "A specific, actionable safety measure.",
+                "timing": "When the precaution should be taken"
+            }
+        }
     ]
-}}
+}
+```
 
-Ensure all codes are unique and descriptive. If no specific equipment links are clear from the report, `equipment_safety_links` can be an empty list. However, `identified_hazards` should always be populated if any hazards can be inferred.
+### 1. `identified_hazards`
+A list of all hazards identified in the report. Each hazard object must contain:
+-   `hazard_code`: A unique identifier for the hazard (e.g., `HAZ-FALL-001`).
+-   `description`: A detailed description of the risk.
+-   `hazard_type`: Must be one of: "Biological", "Chemical", "Ergonomic", "Physical", "Psychosocial", "Safety".
+-   `precautions`: A list of all safety measures related to this hazard. Each precaution object must contain:
+    -   `precaution_code`: A unique identifier for the precaution (e.g., `PREC-FALL001-HARNESS01`).
+    -   `description`: A specific, actionable instruction.
+    -   `timing`: When the action should be taken. Must be one of: "Pre-Work", "During Work", "Post-Work".
+
+### 2. `equipment_safety_links`
+A list linking specific precautions to specific pieces of equipment mentioned in the report.
+-   `equipment_details`: Information about the equipment.
+    -   `equipment_id`: The specific name, model, or identifier of the equipment.
+    -   `class_code`: The equipment's class code. Must be one of: "FLEET", "FACILITY", "TOOL", "HVAC".
+    -   `category` (optional): Must be one of: "Heavy Machinery", "Power Tools", "Hand Tools", "Lifting Equipment", "Vehicles", "Safety Gear".
+-   `linked_precaution`: A Precaution object. This precaution MUST BE an exact copy of one of the precautions listed under the corresponding hazard in the `identified_hazards` list.
+
 Strictly adhere to this JSON structure. Do not use markdown formatting for the JSON output.
-""".replace("{{hazard_type_options}}", hazard_type_options).replace("{{precaution_timing_options}}", precaution_timing_options).replace("{{equipment_category_options}}", equipment_category_options).replace("{{equipment_class_options}}", equipment_class_options)
+"""
 
     def _create_extraction_prompt(self) -> ChatPromptTemplate:
         system_template = self._get_system_prompt_template()
-        system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
+        system_message_prompt = SystemMessagePromptTemplate.from_template(
+            system_template
+        )
         human_template = """Please analyze the following incident report document and extract the structured safety analysis based on the requirements provided.
+
 Incident Report Text:
 {text}
 
 Respond with ONLY the JSON object adhering to the schema described in the system prompt.
 """
         human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
-        return ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
+        return ChatPromptTemplate.from_messages(
+            [system_message_prompt, human_message_prompt]
+        )
 
-    def _extract_incident_analysis(
+    def _extract_job_safety_analysis(
         self, llm: BaseChatModel, documents: List[Document]
-    ) -> Optional[IncidentAnalysisOutput]:
-        logger.info(f"Starting incident analysis extraction from {len(documents)} document chunks.")
+    ) -> Optional[JobSafetyAnalysis]:
+        logger.info(
+            f"Starting job safety analysis extraction from {len(documents)} document chunks."
+        )
         extraction_prompt = self._create_extraction_prompt()
-        parser = PydanticOutputParser(pydantic_object=IncidentAnalysisOutput)
+        parser = PydanticOutputParser(pydantic_object=JobSafetyAnalysis)
 
         chain = load_summarize_chain(
             llm, chain_type="stuff", verbose=True, prompt=extraction_prompt
         )
+        
+        # We are passing the single document with all the text.
+        # The 'stuff' chain type will put it all into the context.
+        input_data = {"input_documents": documents}
+        output_text = ""
         try:
-            response = chain.invoke({"input_documents": documents})
+            response = chain.invoke(input_data)
             output_text = response.get("output_text", "")
             if not output_text:
-                logger.warning("LLM returned empty output for incident analysis.")
+                logger.warning("LLM returned empty output for job safety analysis.")
                 return None
             
             parsed_response = parser.invoke(output_text)
-            logger.info("Successfully parsed LLM response into IncidentAnalysisOutput.")
+            logger.info("Successfully parsed LLM response into JobSafetyAnalysis.")
             return parsed_response
         except Exception as e:
-            logger.error(f"Failed to parse LLM response for incident analysis. Error: {str(e)}. Raw output: '{output_text[:500]}...'")
+            logger.error(
+                f"Failed to parse LLM response for job safety analysis. Error: {str(e)}. Raw output: '{output_text[:500]}...'"
+            )
             return None
 
     def cleanup(self) -> None:
+        """Removes the temporary file if it exists."""
         if self.temp_file_path and os.path.exists(self.temp_file_path):
             try:
                 os.remove(self.temp_file_path)
-                logger.info(f"Cleaned up temporary incident report file: {self.temp_file_path}")
+                logger.info(
+                    f"Cleaned up temporary incident report file: {self.temp_file_path}"
+                )
             except OSError as e:
-                logger.error(f"Error cleaning up temporary file {self.temp_file_path}: {str(e)}")
-        self.temp_file_path = None 
+                logger.error(
+                    f"Error cleaning up temporary file {self.temp_file_path}: {str(e)}"
+                )
+        self.temp_file_path = None

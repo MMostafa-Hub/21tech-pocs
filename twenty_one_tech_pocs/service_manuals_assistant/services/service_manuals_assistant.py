@@ -9,7 +9,7 @@ from langchain.prompts import (
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
-from langchain_community.document_loaders import UnstructuredPDFLoader
+import fitz  # PyMuPDF
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
@@ -51,11 +51,19 @@ class ServiceManualsAssistantService:
             file_path = self._save_temp_file(file)
             self.temp_file_path = file_path
 
-            loader = UnstructuredPDFLoader(file_path)
-            documents = loader.load()
+            # Use PyMuPDF to extract text from the PDF
+            doc = fitz.open(file_path)
+            full_text = ""
+            for page in doc:
+                full_text += page.get_text()
+            doc.close()
 
-            if not documents:
-                raise ValueError("No content could be extracted from the PDF")
+            # Create a single LangChain Document
+            documents = [Document(page_content=full_text)]
+
+            if not documents or not documents[0].page_content.strip():
+                logger.warning(f"No content extracted from {file.name}")
+                return None
 
             processed_data_container = self._process_task_plan_data(llm, documents)
             return processed_data_container.task_plans # Extract list from container
