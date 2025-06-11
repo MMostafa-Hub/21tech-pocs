@@ -40,7 +40,7 @@ class EAMApiService:
 
         headers = self.headers.copy()
         headers["Authorization"] = self._get_auth()
-        headers["organization"] = "LAMETRO" # Example specific org for this call
+        headers["organization"] = "*" # Example specific org for this call
 
         payload = self._transform_task_plan(task_plan)
 
@@ -61,7 +61,7 @@ class EAMApiService:
 
         headers = self.headers.copy()
         headers["Authorization"] = self._get_auth()
-        headers["organization"] = "LAMETRO"
+        headers["organization"] = "*"
 
         payload = self._transform_checklist(
             task_code, checklist_item, sequence)
@@ -83,7 +83,7 @@ class EAMApiService:
 
         headers = self.headers.copy()
         headers["Authorization"] = self._get_auth()
-        headers["organization"] = "LAMETRO" 
+        headers["organization"] = "*" 
 
         payload = self._transform_maintenance_schedule(maintenance_schedule)
 
@@ -107,7 +107,7 @@ class EAMApiService:
             "TASKLISTID": {
                 "TASKCODE": task_plan.task_code,
                 "TASKREVISION": 0,
-                "ORGANIZATIONID": {"ORGANIZATIONCODE": "LAMETRO"},
+                "ORGANIZATIONID": {"ORGANIZATIONCODE": "*"},
                 "DESCRIPTION": task_plan.description
             },
             "STATUS": {"STATUSCODE": "A"},
@@ -141,7 +141,7 @@ class EAMApiService:
             "TASKLISTID": {
                 "TASKCODE": task_code,
                 "TASKREVISION": 0,
-                "ORGANIZATIONID": {"ORGANIZATIONCODE": "LAMETRO"},
+                "ORGANIZATIONID": {"ORGANIZATIONCODE": "*"},
             },
             "CHECKLISTID": {"DESCRIPTION": checklist_item.description},
             "SEQUENCE": sequence,
@@ -157,7 +157,7 @@ class EAMApiService:
             "PPMID": {
                 "PPMCODE": maintenance_schedule.code,
                 "PPMREVISION": 0,
-                "ORGANIZATIONID": {"ORGANIZATIONCODE": "LAMETRO"},
+                "ORGANIZATIONID": {"ORGANIZATIONCODE": "*"},
                 "DESCRIPTION": maintenance_schedule.description
             },
             "PMSCHEDULETYPE": "F",

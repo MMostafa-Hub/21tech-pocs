@@ -23,6 +23,9 @@
 
     05/29/2025		@lucky.djomo		- Added checkbox "Generate Certification Requirements"
 										- Update EF to handle the checkbox.
+
+    01/15/2025		@Mohamed.Mostafa	- Updated `formatCertificationReqResponse` to handle new API response structure
+										- Modified function to process `qualification_extraction.qualifications` array
 */
 
 Ext.define('EAM.custom.external_bsdocu', {
@@ -125,19 +128,37 @@ Ext.define('EAM.custom.external_bsdocu', {
             return message;
         };
 
-        // Format response for Certification Requirements | ** To be updated by Mohamed based on the backend Response
+        // Format response for Certification Requirements
         const formatCertificationReqResponse = (data) => {
             let message = 'API Call Successful!';
-            if (data.extracted_data) {
-                message += '\n\nCertification Requirements:\n  ' + data.extracted_data.code;
-                message += '\n\nRequirements:';
-                data.extracted_data.task_plans.forEach((taskPlan, index) => {
+            
+            if (data.qualification_extraction && data.qualification_extraction.qualifications) {
+                const qualifications = data.qualification_extraction.qualifications;
+                const summary = data.summary;
+                
+                // Display summary first
+                if (summary) {
+                    message += `\n\nTraining Manual Analysis Summary:`;
+                    message += `\n  Total Qualifications Found: ${summary.total_qualifications}`;
+                }
+                
+                // Display detailed qualifications
+                message += '\n\nQualification Requirements:';
+                qualifications.forEach((qual, index) => {
                     if (index > 0) message += '\n';
-                    message += '\n  • ' + taskPlan.task_code;
-                    (taskPlan.checklist || []).forEach(item => {
-                        message += '\n    - ' + item.checklist_id;
-                    });
+                    message += `\n  • Code: ${qual.qualification_code}`;
+                    message += `\n    Description: ${qual.qualification_description}`;
                 });
+                
+                // Display qualification codes list
+                if (summary && summary.qualification_codes) {
+                    message += '\n\nQualification Codes Summary:';
+                    summary.qualification_codes.forEach((code, index) => {
+                        message += `\n  ${index + 1}. ${code}`;
+                    });
+                }
+            } else if (data.error) {
+                message = 'API Call Failed:\n  ' + data.error;
             } else {
                 message += '\n\n' + (typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
             }
@@ -172,7 +193,7 @@ Ext.define('EAM.custom.external_bsdocu', {
 
             // Checkbox 4: Generate Training Manuals | Certification Requirements Document
             '[extensibleFramework] [tabName=HDR][isTabView=true] [name=udfchkbox04]': {
-                change: efc.createCheckboxHandler('/api/training_manuals/process-document/', formatCertificationReqResponse)
+                change: efc.createCheckboxHandler('/api/training-manuals/process-training-manual/', formatCertificationReqResponse)
             }
         };
     },
@@ -222,7 +243,7 @@ Ext.define('EAM.custom.external_bsdocu', {
         const API_URL = `${baseUrl}${apiPath}`;
         const payload = {
             document_code: vDoccode,
-            create_in_eam: false
+            create_in_eam: true
         };
 
         console.log('API Request:', {
