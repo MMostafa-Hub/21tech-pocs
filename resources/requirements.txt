@@ -27,9 +27,8 @@ langchain-elasticsearch==0.3.0
 langchain-text-splitters==0.3.8
 langchain-ollama==0.2.0
 
-# Document Processing (only if you're using UnstructuredPDFLoader)
-unstructured[pdf]==0.15.13
-pdfminer.six==20221105
+# Document Processing
+PyMuPDF==1.24.9
 
 # Vector Database (only if using Elasticsearch)
 elasticsearch==8.14.0
