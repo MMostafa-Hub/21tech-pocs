@@ -66,11 +66,11 @@ class MaintenanceAssistantService:
                 logger.warning(f"No content extracted from {file.name}")
                 raise ValueError("No content could be extracted from the PDF")
 
-            # Create a summary of the document to use as context
-            summary = self._summarize_document(llm, documents)
+            # Process the document to extract maintenance information
+            processed_data = self._process_maintenance_data(llm, documents)
 
-            return summary
-
+            return processed_data
+        
         except Exception as e:
             logger.error(f"Error processing document {file.name}: {str(e)}")
             raise
