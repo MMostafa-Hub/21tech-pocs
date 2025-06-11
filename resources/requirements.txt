@@ -29,7 +29,7 @@ langchain-ollama==0.2.0
 
 # Document Processing (only if you're using UnstructuredPDFLoader)
 unstructured[pdf]==0.15.13
-pdfminer.six==20250506
+pdfminer.six==20221105
 
 # Vector Database (only if using Elasticsearch)
 elasticsearch==8.14.0
