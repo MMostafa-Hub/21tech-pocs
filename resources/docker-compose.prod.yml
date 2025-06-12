@@ -1,0 +1,79 @@
+services:
+  django_app:
+    build: 
+      context: ..
+      dockerfile: resources/dockerfile.prod
+    container_name: django_app
+    env_file:
+      - ../.env
+    environment:
+      - ES_URL=http://elasticsearch:9200
+      - DJANGO_SETTINGS_MODULE=twenty_one_tech_pocs.settings
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ../twenty_one_tech_pocs:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    networks:
+      - tech
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ../twenty_one_tech_pocs/cert.pem:/etc/nginx/ssl/cert.pem
+      - ../twenty_one_tech_pocs/key.pem:/etc/nginx/ssl/key.pem
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      - django_app
+    networks:
+      - tech
+    restart: unless-stopped
+
+  elasticsearch:
+    image: elasticsearch:8.14.3
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9201:9200"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sS http://localhost:9200/_cluster/health | grep -qE '(green|yellow)' || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - tech
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.5.7
+    container_name: ollama
+    ports:
+      - "11435:11434"
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - tech
+
+volumes:
+  es_data:
+  ollama_data:
+  static_volume:
+  media_volume:
+
+networks:
+  tech:
+    driver: bridge 
