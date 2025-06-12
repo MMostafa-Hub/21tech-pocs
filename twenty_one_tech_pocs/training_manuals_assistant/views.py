@@ -32,7 +32,7 @@ class ProcessTrainingManualView(APIView):
 
     def post(self, request):
         try:
-            document_code = request.data.get("document_code")
+            document_code = request.POST.get("document_code") if request.POST else request.data.get("document_code")
             training_manual_file_direct = request.FILES.get("training_manual_file")
             
             if not document_code and not training_manual_file_direct:
@@ -42,7 +42,7 @@ class ProcessTrainingManualView(APIView):
                 )
             
             # For future EAM integration - currently just extracting qualification data
-            create_qualifications_in_eam = request.data.get("create_in_eam", False)
+            create_qualifications_in_eam = request.POST.get("create_in_eam", "false").lower() == "true"
             processed_file_for_service: Optional[InMemoryUploadedFile] = None
             document_name_for_service = "training_manual.pdf"
 
