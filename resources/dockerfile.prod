@@ -16,11 +16,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy and install Python requirements
-COPY requirements.txt .
+COPY resources/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
-COPY . .
+COPY twenty_one_tech_pocs/ ./twenty_one_tech_pocs/
+COPY resources/ ./resources/
+
+# Set Django settings module and working directory
+WORKDIR /app/twenty_one_tech_pocs
 
 # Create a non-root user
 RUN adduser --disabled-password --gecos '' appuser && \
@@ -34,4 +38,4 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 8000
 
 # Use Gunicorn for production
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "twenty_one_tech_pocs.wsgi:application"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "twenty_one_tech_pocs.wsgi:application"] 

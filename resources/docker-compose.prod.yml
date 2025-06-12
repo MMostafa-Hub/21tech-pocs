@@ -3,6 +3,8 @@ services:
     build: 
       context: ..
       dockerfile: resources/dockerfile.prod
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     container_name: django_app
     env_file:
       - ../.env
@@ -12,12 +14,18 @@ services:
     depends_on:
       - elasticsearch
     volumes:
-      - ../twenty_one_tech_pocs:/app
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      - ../twenty_one_tech_pocs:/app/twenty_one_tech_pocs
+      - static_volume:/app/twenty_one_tech_pocs/staticfiles
+      - media_volume:/app/twenty_one_tech_pocs/media
     networks:
       - tech
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
 
   nginx:
     image: nginx:alpine
