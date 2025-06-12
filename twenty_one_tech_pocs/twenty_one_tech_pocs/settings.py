@@ -29,6 +29,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     "chief-unified-moccasin.ngrok-free.app",
     "localhost",
+    "54.219.76.120",
 ]
 
 
