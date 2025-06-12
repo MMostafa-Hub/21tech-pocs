@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # For building some python packages
     gcc \
     g++ \
+    # For SSL certificate generation
+    openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container
@@ -23,6 +25,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application's code
 COPY . .
+
+# Generate SSL certificates for HTTPS
+RUN openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
+    -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN=localhost"
 
 # Expose the port the app runs on
 EXPOSE 8001

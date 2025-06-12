@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "corsheaders",
     'rest_framework',
+    'django_extensions',
     'maintenance_assistant',
     'service_manuals_assistant',
     'safety_procedure_assistant',
