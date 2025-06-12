@@ -41,7 +41,7 @@ docker-compose -f docker-compose.prod.yml ps
 
 # Test HTTPS endpoint
 echo "🧪 Testing HTTPS endpoint..."
-if curl -k -s -o /dev/null -w "%{http_code}" https://54.219.76.120/ | grep -q "200\|301\|302"; then
+if curl -k -s -o /dev/null -w "%{http_code}" https://54.219.76.120:8001/ | grep -q "200\|301\|302"; then
     echo "✅ HTTPS endpoint is responding!"
 else
     echo "❌ HTTPS endpoint is not responding. Check logs with: docker-compose -f docker-compose.prod.yml logs"
@@ -49,7 +49,7 @@ fi
 
 echo ""
 echo "🎉 Deployment complete!"
-echo "📱 Your API is available at: https://54.219.76.120/"
+echo "📱 Your API is available at: https://54.219.76.120:8001/"
 echo "📊 View logs: docker-compose -f docker-compose.prod.yml logs -f"
 echo "🛑 Stop services: docker-compose -f docker-compose.prod.yml down"
 echo ""
