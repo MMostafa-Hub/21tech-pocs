@@ -6,8 +6,8 @@ The `common` application provides a set of shared services and utilities used ac
 
 The `common` app is a core part of the "AI Development" backend, providing the necessary integrations for the system to function, as shown in the architecture diagram.
 
-*Note: Please add the architecture diagram image to the `resources` folder as `architecture.png` for it to be displayed here.*
-![Architecture Diagram](../resources/architecture.png)
+*Note: Please add the architecture diagram image to the `DOCS/images` folder as `architecture.jpg` for it to be displayed here.*
+![Architecture Diagram](./images/architecture.jpg)
 
 ## Modules
 

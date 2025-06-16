@@ -6,8 +6,8 @@ The **Service Manuals Assistant** application automates the creation of Task Pla
 
 This assistant uses the same PDF-processing architecture as the other assistants. Its specific goal is to read a technical service manual and extract one or more **Task Plans** and their corresponding **Checklists**. Unlike the `Maintenance Assistant`, it does not create an overarching PM Schedule; it focuses solely on the Task Plans themselves, which can then be used independently or linked to work orders in EAM.
 
-*Note: Please add the architecture diagram for this app to the `DOCS/images` folder as `service_manuals_assistant_architecture.png` for it to be displayed here.*
-![Service Manuals Assistant Architecture](./images/service_manuals_assistant_architecture.png)
+*Note: Please add the architecture diagram for this app to the `DOCS/images` folder as `service_manuals_assistant_architecture.jpg` for it to be displayed here.*
+![Service Manuals Assistant Architecture](./images/service_manuals_assistant_architecture.jpg)
 
 ## Data Flow Differences
 

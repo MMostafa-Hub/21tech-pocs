@@ -6,8 +6,8 @@ The **Training Manuals Assistant** is a Django application that automates the cr
 
 Following the same PDF-processing architecture, this assistant's specific purpose is to read a training manual and extract a list of all the qualifications, certifications, or skills required for a technician to work on the specified equipment. It then creates these as formal `Qualification` records in EAM.
 
-*Note: Please add the architecture diagram for this app to the `DOCS/images` folder as `training_manuals_assistant_architecture.png` for it to be displayed here.*
-![Training Manuals Assistant Architecture](./images/training_manuals_assistant_architecture.png)
+*Note: Please add the architecture diagram for this app to the `DOCS/images` folder as `training_manuals_assistant_architecture.jpg` for it to be displayed here.*
+![Training Manuals Assistant Architecture](./images/training_manuals_assistant_architecture.jpg)
 
 ## Data Flow Differences
 
